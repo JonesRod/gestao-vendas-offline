@@ -1,0 +1,190 @@
+import Dexie, { type EntityTable } from 'dexie';
+
+// 1. Definição das Interfaces (Tabelas)
+export interface Address {
+  cep: string;
+  street: string;
+  number: string;
+  neighborhood: string;
+  city: string;
+  state: string;
+  observation: string;
+}
+
+export interface Customer {
+  id?: number;
+  name: string;
+  cpf?: string;
+  email?: string;
+  birth_date?: string;
+  phone: string;
+  credit_limit: number;
+  credit_used: number;
+  is_blocked: boolean;
+  due_date: number;
+  status?: 'ativo' | 'espera' | 'serasa';
+  address?: Address;
+  created_at: Date;
+}
+
+export interface KitItem {
+  productId: number;
+  quantity: number;
+}
+
+export interface Product {
+  [x: string]: any;
+  id?: number;
+  name: string;
+  description?: string;
+  cost?: number;
+  margin_cash?: number;
+  margin_credit?: number;
+  price_cash: number;
+  price_credit: number;
+  stock: number;
+  is_active?: boolean;
+  images?: string[];
+  type: 'product' | 'kit';
+  kit_items?: KitItem[];
+  allow_credit?: boolean;
+  max_installments?: number;
+  created_at: Date;
+}
+
+export interface Sale {
+  id?: number;
+  customerId?: number; // Opcional (se for venda avulsa)
+  totalAmount: number;
+  paymentMethod: 'cash' | 'credit';
+  status: 'paid' | 'pending';
+  date: Date;
+  due_date?: Date;
+}
+
+export interface Installment {
+  id?: number;
+  saleId: number;
+  customerId: number;
+  amount: number;
+  due_date: Date;
+  status: 'paid' | 'pending';
+  number: number;
+  total: number;
+  productName: string; // Para o cliente e lojista saberem do que é essa parcela (ou 'Vários' se agrupar)
+}
+
+export interface Payment {
+  id?: number;
+  customerId: number;
+  amount: number;
+  method: 'cash' | 'pix' | 'card';
+  date: Date;
+}
+
+export interface SaleItem {
+  id?: number;
+  saleId: number;
+  productId: number;
+  quantity: number;
+  price_applied: number;
+}
+
+export interface Employee {
+  id?: number;
+  name: string;
+  cpf?: string;
+  email?: string;
+  birth_date?: string;
+  role: string;
+  phone: string;
+  is_active: boolean;
+  address?: Address;
+  created_at: Date;
+}
+
+export interface Settings {
+  id?: number;
+  email: string;
+  phone: string;
+  address: Address;
+  tradeName: string;
+  companyName: string;
+  cnpj: string;
+  ownerBirthDate: string;
+
+  loyalty_active: boolean;
+  loyalty_days: number;
+
+  punctuality_discount_active: boolean;
+  punctuality_discount_percent: number;
+
+  penalty_active: boolean;
+  penalty_percent: number;
+  interest_percent: number;
+
+  whatsapp_token?: string;
+  whatsapp_instance?: string;
+  email_token?: string;
+  email_sender?: string;
+
+  updated_at?: Date;
+}
+
+// 2. Configuração do Banco Dexie
+const db = new Dexie('GestaoOfflineDB') as Dexie & {
+  customers: EntityTable<Customer, 'id'>,
+  products: EntityTable<Product, 'id'>,
+  sales: EntityTable<Sale, 'id'>,
+  saleItems: EntityTable<SaleItem, 'id'>,
+  installments: EntityTable<Installment, 'id'>,
+  employees: EntityTable<Employee, 'id'>,
+  settings: EntityTable<Settings, 'id'>,
+  payments: EntityTable<Payment, 'id'>
+};
+
+// Configuração do Schema (quais campos são indexados para busca)
+db.version(7).stores({
+  customers: '++id, name, cpf, phone, is_blocked',
+  products: '++id, name, type, is_active',
+  sales: '++id, customerId, status, date',
+  saleItems: '++id, saleId, productId',
+  installments: '++id, saleId, customerId, status, due_date',
+  employees: '++id, name, cpf, role, is_active',
+  settings: '++id',
+  payments: '++id, customerId, date'
+});
+
+// 3. Popular db com dados iniciais (simulados) se estiver vazio
+export async function seedDatabase() {
+  const customerCount = await db.customers.count();
+  
+  if (customerCount === 0) {
+    console.log('Populando banco de dados offline com dados iniciais...');
+    
+    await db.customers.bulkAdd([
+      { name: 'João Silva', phone: '(11) 98765-4321', credit_limit: 1000.00, credit_used: 450.00, is_blocked: false, due_date: 15, created_at: new Date() },
+      { name: 'Maria Santos', phone: '(11) 91234-5678', credit_limit: 500.00, credit_used: 500.00, is_blocked: true, due_date: 10, created_at: new Date() },
+      { name: 'Carlos Oliveira', phone: '(11) 99876-1234', credit_limit: 800.00, credit_used: 120.00, is_blocked: false, due_date: 5, created_at: new Date() },
+      { name: 'Ana Costa', phone: '(11) 94567-8901', credit_limit: 0.00, credit_used: 0.00, is_blocked: false, due_date: 0, created_at: new Date() }
+    ]);
+
+    await db.products.bulkAdd([
+      { name: 'Cesta Básica Simples', price_cash: 120.00, price_credit: 130.00, stock: 45, type: 'kit', created_at: new Date() },
+      { name: 'Cesta Básica Completa', price_cash: 180.00, price_credit: 195.00, stock: 20, type: 'kit', created_at: new Date() },
+      { name: 'Cesta VIP', price_cash: 250.00, price_credit: 270.00, stock: 15, type: 'kit', created_at: new Date() },
+      { name: 'Botijão de Gás 13kg', price_cash: 105.00, price_credit: 112.00, stock: 32, type: 'product', created_at: new Date() },
+      { name: 'Arroz 5kg (Avulso)', price_cash: 25.00, price_credit: 27.00, stock: 100, type: 'product', created_at: new Date() },
+    ]);
+
+    await db.employees.bulkAdd([
+      { name: 'João Administrador', role: 'Gerente', phone: '(11) 90000-0000', is_active: true, created_at: new Date() },
+      { name: 'Maria Vendedora', role: 'Vendedor', phone: '(11) 90000-0001', is_active: true, created_at: new Date() }
+    ]);
+  }
+}
+
+// Inicializar Seed
+seedDatabase();
+
+export { db };

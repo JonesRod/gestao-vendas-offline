@@ -1,0 +1,508 @@
+import { useState } from 'react';
+import { Search, DollarSign, Wallet, CheckCircle, ChevronLeft, Calendar, FileText, Info, Printer, Share2 } from 'lucide-react';
+import { useLiveQuery } from 'dexie-react-hooks';
+import { db, type Customer, type Installment, type Sale } from '../db/db';
+import Modal from '../components/Modal';
+import { maskCurrency, parseCurrency } from '../utils/masks';
+import './Receipts.css';
+
+export default function Receipts() {
+  const [searchTerm, setSearchTerm] = useState('');
+  const [step, setStep] = useState<'search' | 'account'>('search');
+  const [selectedCustomer, setSelectedCustomer] = useState<Customer | null>(null);
+  const [customerInstallments, setCustomerInstallments] = useState<Installment[]>([]);
+  
+  // Detalhes da parcela
+  const [selectedInstallment, setSelectedInstallment] = useState<Installment | null>(null);
+  const [installmentSale, setInstallmentSale] = useState<Sale | null>(null);
+  const [isDetailsModalOpen, setIsDetailsModalOpen] = useState(false);
+
+  // Pagamento da parcela
+  const [isPaymentModalOpen, setIsPaymentModalOpen] = useState(false);
+  const [paymentAmount, setPaymentAmount] = useState<number>(0);
+  const [discountAmount, setDiscountAmount] = useState<number>(0);
+  const [autoDiscount, setAutoDiscount] = useState<number>(0);
+  const [nextDueDate, setNextDueDate] = useState('');
+  const [paymentMethod, setPaymentMethod] = useState<'cash' | 'pix' | 'card'>('cash');
+  const [showSuccess, setShowSuccess] = useState(false);
+  
+  const settings = useLiveQuery(() => db.settings.toCollection().first());
+
+  const customers = useLiveQuery(() => db.customers.toArray()) || [];
+  const debtors = customers.filter(c => c.credit_used > 0);
+  
+  const pendingInstallments = useLiveQuery(() => db.installments.where('status').equals('pending').toArray()) || [];
+
+  const attentionCustomerIds = new Set(
+    pendingInstallments.filter(inst => {
+      const today = new Date();
+      today.setHours(0,0,0,0);
+      const nextDays = new Date(today);
+      nextDays.setDate(today.getDate() + 5); 
+      return new Date(inst.due_date) <= nextDays;
+    }).map(inst => inst.customerId)
+  );
+
+  const attentionDebtors = debtors.filter(c => c.id && attentionCustomerIds.has(c.id));
+
+  // Não mostrar clientes de início (só se pesquisar)
+  const filteredDebtors = searchTerm.trim().length >= 2 ? debtors.filter((c: Customer) => 
+    c.name.toLowerCase().includes(searchTerm.toLowerCase()) || 
+    c.phone.includes(searchTerm)
+  ) : [];
+
+  const totalDebt = debtors.reduce((sum, c) => sum + c.credit_used, 0);
+
+  const handleSelectCustomer = async (customer: Customer) => {
+    setSelectedCustomer(customer);
+    await loadCustomerInstallments(customer.id!);
+    setStep('account');
+  };
+
+  const loadCustomerInstallments = async (customerId: number) => {
+    const installs = await db.installments.where({ customerId, status: 'pending' }).toArray();
+    // Sort by due date (closest first)
+    installs.sort((a, b) => new Date(a.due_date).getTime() - new Date(b.due_date).getTime());
+    setCustomerInstallments(installs);
+  };
+
+  const openDetails = async (installment: Installment) => {
+    setSelectedInstallment(installment);
+    const sale = await db.sales.get(installment.saleId);
+    setInstallmentSale(sale || null);
+    setIsDetailsModalOpen(true);
+  };
+
+  const openPayment = (installment: Installment) => {
+    setSelectedInstallment(installment);
+    
+    let calcAutoDiscount = 0;
+    if (settings?.punctuality_discount_active) {
+       const todayNum = new Date().setHours(0,0,0,0);
+       const dueNum = new Date(installment.due_date).setHours(0,0,0,0);
+       if (todayNum <= dueNum) {
+          calcAutoDiscount = installment.amount * (settings.punctuality_discount_percent / 100);
+       }
+    }
+    setAutoDiscount(calcAutoDiscount);
+    setDiscountAmount(calcAutoDiscount);
+
+    setPaymentAmount(installment.amount - calcAutoDiscount);
+    setNextDueDate('');
+    setIsPaymentModalOpen(true);
+  };
+
+  const handlePayment = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!selectedCustomer || !selectedCustomer.id || !selectedInstallment || !selectedInstallment.id) return;
+    
+    const finalExpected = selectedInstallment.amount - discountAmount;
+
+    if (paymentAmount <= 0 && finalExpected > 0) {
+      alert('Valor de pagamento inválido.');
+      return;
+    }
+
+    if (paymentAmount > finalExpected) {
+      alert('O valor informado é maior do que o total esperado com desconto.');
+      return;
+    }
+
+    const isPartial = paymentAmount < finalExpected;
+
+    if (isPartial && !nextDueDate) {
+      alert('Para recebimento parcial, informe a data de vencimento do restante.');
+      return;
+    }
+
+    try {
+      if (!isPartial) {
+        // 1. Marca parcela como paga integralmente
+        await db.installments.update(selectedInstallment.id, { 
+          status: 'paid' 
+        });
+      } else {
+        // 1. Recebimento parcial: diminui o valor da parcela abatendo o desconto junto e empurra a validade
+        const [y, m, d] = nextDueDate.split('-');
+        const dateObj = new Date(Number(y), Number(m) - 1, Number(d));
+        await db.installments.update(selectedInstallment.id, {
+          amount: finalExpected - paymentAmount,
+          due_date: dateObj
+        });
+      }
+
+      // 2. Registra o dinheiro físico que entrou
+      if (paymentAmount > 0) {
+        await db.payments.add({
+          customerId: selectedCustomer.id,
+          amount: paymentAmount,
+          method: paymentMethod,
+          date: new Date()
+        });
+      }
+
+      // 3. Abate do crédito utilizado (Dívida total = Dinheiro que pagou + Desconto que demos)
+      const newCreditUsed = selectedCustomer.credit_used - (paymentAmount + discountAmount);
+      await db.customers.update(selectedCustomer.id, {
+        credit_used: Math.max(0, newCreditUsed) 
+      });
+
+      setIsPaymentModalOpen(false);
+      setShowSuccess(true);
+      
+      const updatedCustomer = await db.customers.get(selectedCustomer.id);
+      if (updatedCustomer) setSelectedCustomer(updatedCustomer);
+      await loadCustomerInstallments(selectedCustomer.id);
+
+      setTimeout(() => setShowSuccess(false), 3000);
+    } catch (err) {
+      console.error(err);
+      alert('Erro ao registrar pagamento da parcela.');
+    }
+  };
+
+  const calculateDelay = (dueDate: Date) => {
+    const today = new Date();
+    today.setHours(0,0,0,0);
+    const due = new Date(dueDate);
+    due.setHours(0,0,0,0);
+    const diffTime = today.getTime() - due.getTime();
+    const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
+    return diffDays > 0 ? diffDays : 0;
+  };
+
+  return (
+    <div style={{display: 'flex', flexDirection: 'column', gap: '1.5rem', animation: 'fadeIn 0.4s ease-out'}}>
+      
+      {step === 'search' && (
+        <>
+          <div className="page-header">
+            <h1 className="page-title">Cobranças e Recebimentos</h1>
+          </div>
+
+          <div className="receipts-layout">
+            <div style={{ flex: 1, display: 'flex', flexDirection: 'column', gap: '1rem' }}>
+              <div className="search-box glass-panel" style={{ flex: 'none', padding: '1rem', display: 'flex', alignItems: 'center', borderRadius: '12px', border: '1px solid var(--border-color)' }}>
+                <Search size={20} className="text-muted" style={{ marginRight: '1rem' }} />
+                <input 
+                  type="text" 
+                  placeholder="Pesquisar cliente (digite ao menos 2 letras)..." 
+                  value={searchTerm}
+                  onChange={(e) => setSearchTerm(e.target.value)}
+                  style={{ background: 'transparent', border: 'none', outline: 'none', color: 'var(--text-main)', flex: 1, fontSize: '1.05rem' }}
+                />
+              </div>
+
+              <div style={{ display: 'grid', gap: '1rem' }}>
+                {searchTerm.trim().length >= 2 ? (
+                   filteredDebtors.length === 0 ? (
+                    <p style={{color: 'var(--text-muted)'}}>Nenhum devedor encontrado com essa busca.</p>
+                   ) : (
+                    filteredDebtors.map(customer => (
+                      <div key={customer.id} className="debtor-row glass-panel" onClick={() => handleSelectCustomer(customer)}>
+                        <div>
+                          <h3 style={{ fontSize: '1.2rem', marginBottom: '0.2rem' }}>{customer.name}</h3>
+                          <p style={{ color: 'var(--text-muted)', fontSize: '0.85rem' }}>{customer.phone}</p>
+                        </div>
+                        <div className="debtor-total" style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: '0.5rem' }}>
+                          <div style={{ fontSize: '1.2rem', color: 'var(--text-muted)' }}>Dívida Total:</div>
+                          <div style={{ fontSize: '1.4rem', fontWeight: 800, color: 'var(--warning)' }}>R$ {customer.credit_used.toLocaleString('pt-BR', {minimumFractionDigits: 2, maximumFractionDigits: 2})}</div>
+                        </div>
+                      </div>
+                    ))
+                   )
+                ) : (
+                  <>
+                    <h3 style={{ fontSize: '1rem', color: 'var(--warning)', marginBottom: '0.5rem', display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                       Em Atraso & Vencendo (Próx. 5 dias)
+                    </h3>
+                    {attentionDebtors.length === 0 ? (
+                      <div style={{ padding: '3rem', textAlign: 'center', color: 'var(--text-muted)', background: 'rgba(255,255,255,0.02)', borderRadius: '12px', border: '1px dashed var(--border-color)' }}>
+                        <CheckCircle size={48} style={{ opacity: 0.2, margin: '0 auto 1rem', color: 'var(--success)' }} />
+                        <p>Excelente! Nenhuma conta de cliente está em atraso ou vencendo nos próximos 5 dias.</p>
+                      </div>
+                    ) : (
+                      attentionDebtors.map(customer => (
+                        <div key={customer.id} className="debtor-row glass-panel" onClick={() => handleSelectCustomer(customer)} style={{ borderLeft: '4px solid var(--danger)' }}>
+                          <div>
+                            <h3 style={{ fontSize: '1.2rem', marginBottom: '0.2rem' }}>{customer.name}</h3>
+                            <p style={{ color: 'var(--text-muted)', fontSize: '0.85rem' }}>{customer.phone}</p>
+                          </div>
+                          <div className="debtor-total" style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: '0.5rem' }}>
+                            <div style={{ fontSize: '1.2rem', color: 'var(--text-muted)' }}>Dívida Total:</div>
+                            <div style={{ fontSize: '1.4rem', fontWeight: 800, color: 'var(--warning)' }}>R$ {customer.credit_used.toLocaleString('pt-BR', {minimumFractionDigits: 2, maximumFractionDigits: 2})}</div>
+                          </div>
+                        </div>
+                      ))
+                    )}
+                  </>
+                )}
+              </div>
+            </div>
+
+            <div className="overview-panel">
+              <div className="glass-panel" style={{ padding: '1.5rem', borderRadius: '16px', background: 'var(--bg-glass)' }}>
+                <h2 style={{ fontSize: '1.2rem', marginBottom: '1rem', display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                  <Wallet size={20} className="text-primary" /> Balanço Geral
+                </h2>
+                <div style={{ background: 'rgba(245, 158, 11, 0.1)', border: '1px solid rgba(245, 158, 11, 0.2)', padding: '1rem', borderRadius: '12px' }}>
+                  <span style={{ fontSize: '0.85rem', color: 'var(--text-muted)' }}>Total a Receber (Rua)</span>
+                  <div style={{ fontSize: '2.2rem', fontWeight: 800, color: 'var(--warning)', marginTop: '0.5rem' }}>
+                    R$ {totalDebt.toLocaleString('pt-BR', {minimumFractionDigits: 2, maximumFractionDigits: 2})}
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </>
+      )}
+
+      {step === 'account' && selectedCustomer && (
+        <div style={{ animation: 'fadeIn 0.3s' }}>
+          <div className="account-header">
+            <button className="btn-icon" onClick={() => setStep('search')} style={{ background: 'var(--glass-bg)', padding: '0.75rem' }}>
+              <ChevronLeft size={24} />
+            </button>
+            <div>
+              <h2 style={{ fontSize: '1.8rem', margin: 0 }}>{selectedCustomer.name}</h2>
+              <p style={{ color: 'var(--text-muted)' }}>Conta e Parcelas em Aberto</p>
+            </div>
+            <div className="account-header-total">
+               <span style={{ fontSize: '0.85rem', color: 'var(--text-muted)', display: 'block' }}>Saldo Devedor Total</span>
+               <span style={{ fontSize: '1.5rem', fontWeight: 800, color: 'var(--warning)' }}>R$ {selectedCustomer.credit_used.toLocaleString('pt-BR', {minimumFractionDigits: 2, maximumFractionDigits: 2})}</span>
+            </div>
+            <div style={{ display: 'flex', gap: '0.5rem', marginLeft: 'auto' }}>
+              <button className="btn-secondary" style={{ padding: '0.6rem', display: 'flex', alignItems: 'center', justifyContent: 'center', borderRadius: '8px' }} onClick={() => window.print()} title="Imprimir Relatório do Cliente">
+                <Printer size={20} />
+              </button>
+              <button className="btn-secondary" style={{ padding: '0.6rem', display: 'flex', alignItems: 'center', justifyContent: 'center', borderRadius: '8px' }} onClick={async () => {
+                 if (navigator.share) {
+                   try { await navigator.share({ title: 'Fatura do Cliente - Gestão Offline', text: `Confira o relatório de pendências de ${selectedCustomer.name}`, url: window.location.href }); } catch (e) {}
+                 } else { alert('Compartilhamento não suportado.'); }
+              }} title="Compartilhar">
+                <Share2 size={20} />
+              </button>
+            </div>
+          </div>
+
+          <div style={{ display: 'grid', gap: '1rem' }}>
+            {customerInstallments.length === 0 ? (
+               <div className="glass-panel" style={{ padding: '3rem', textAlign: 'center', borderRadius: '12px' }}>
+                  <CheckCircle size={48} className="text-success" style={{ margin: '0 auto 1rem' }} />
+                  <h3 style={{ fontSize: '1.2rem', color: 'var(--success)' }}>Tudo em dias!</h3>
+                  <p style={{ color: 'var(--text-muted)' }}>Este cliente não possui parcelas pendentes.</p>
+               </div>
+            ) : (
+               customerInstallments.map(inst => {
+                 const isDelayed = calculateDelay(inst.due_date) > 0;
+                 return (
+                  <div key={inst.id} className="installment-card glass-panel" style={{ borderLeft: isDelayed ? '4px solid var(--danger)' : '4px solid var(--primary)' }}>
+                    
+                    <div className="installment-info">
+                      <div style={{ background: 'rgba(255,255,255,0.05)', padding: '1rem', borderRadius: '8px', textAlign: 'center', minWidth: '80px' }}>
+                        <span style={{ fontSize: '0.8rem', color: 'var(--text-muted)', display: 'block' }}>Parcela</span>
+                        <span style={{ fontSize: '1.4rem', fontWeight: 'bold' }}>{inst.number}/{inst.total}</span>
+                      </div>
+                      
+                      <div>
+                        <h4 style={{ fontSize: '1.1rem', margin: '0 0 0.25rem 0' }}>{inst.productName}</h4>
+                        <div style={{ display: 'flex', gap: '1rem', color: 'var(--text-muted)', fontSize: '0.9rem' }}>
+                          <span style={{ display: 'flex', alignItems: 'center', gap: '0.3rem', color: isDelayed ? 'var(--danger)' : 'inherit' }}>
+                            <Calendar size={14} /> 
+                            Vence: {new Date(inst.due_date).toLocaleDateString()}
+                            {isDelayed && <strong style={{ marginLeft: '0.5rem' }}>({calculateDelay(inst.due_date)} dias atraso)</strong>}
+                          </span>
+                        </div>
+                      </div>
+                    </div>
+
+                    <div className="installment-actions">
+                      <div className="amount-display" style={{ textAlign: 'right' }}>
+                        <span style={{ fontSize: '0.8rem', color: 'var(--text-muted)', display: 'block' }}>Valor da Parcela</span>
+                        <span style={{ fontSize: '1.4rem', fontWeight: 800, color: 'white' }}>R$ {inst.amount.toLocaleString('pt-BR', {minimumFractionDigits: 2, maximumFractionDigits: 2})}</span>
+                      </div>
+                      
+                      <div className="installment-actions-btns">
+                        <button className="btn-secondary" style={{ padding: '0.5rem 1rem', fontSize: '0.85rem', display: 'flex', gap: '0.5rem', alignItems: 'center', justifyContent: 'center' }} title="Detalhes da Fatura" onClick={() => openDetails(inst)}>
+                          <Info size={16} /> Det.
+                        </button>
+                        <button className="btn-primary" style={{ padding: '0.5rem 1rem', fontSize: '0.85rem', display: 'flex', gap: '0.5rem', alignItems: 'center', justifyContent: 'center', background: 'var(--success)' }} title="Receber Título / Dar Baixa" onClick={() => openPayment(inst)}>
+                          <DollarSign size={16} /> Rec.
+                        </button>
+                      </div>
+                    </div>
+
+                  </div>
+                 )
+               })
+            )}
+          </div>
+        </div>
+      )}
+
+      {/* MODAL DETALHES */}
+      <Modal isOpen={isDetailsModalOpen} onClose={() => setIsDetailsModalOpen(false)} title="Detalhes da Fatura" size="default">
+        {selectedInstallment && (
+          <div>
+            <div style={{ background: 'rgba(255,255,255,0.03)', padding: '1.5rem', borderRadius: '12px', marginBottom: '1.5rem' }}>
+              <h3 style={{ margin: '0 0 1rem 0', display: 'flex', alignItems: 'center', gap: '0.5rem', color: 'var(--primary)' }}>
+                <FileText size={20} /> Resumo do Título
+              </h3>
+              <div className="details-grid">
+                <div>
+                  <span style={{ fontSize: '0.85rem', color: 'var(--text-muted)' }}>Produto / Referência</span>
+                  <div style={{ fontWeight: 600 }}>{selectedInstallment.productName}</div>
+                </div>
+                <div>
+                  <span style={{ fontSize: '0.85rem', color: 'var(--text-muted)' }}>N° da Parcela</span>
+                  <div style={{ fontWeight: 600 }}>{selectedInstallment.number} de {selectedInstallment.total}</div>
+                </div>
+                <div>
+                  <span style={{ fontSize: '0.85rem', color: 'var(--text-muted)' }}>Data da Emissão (Compra)</span>
+                  <div style={{ fontWeight: 600 }}>{installmentSale ? new Date(installmentSale.date).toLocaleDateString() : 'Desconhecida'}</div>
+                </div>
+                <div>
+                  <span style={{ fontSize: '0.85rem', color: 'var(--text-muted)' }}>Data de Vencimento</span>
+                  <div style={{ fontWeight: 600 }}>{new Date(selectedInstallment.due_date).toLocaleDateString()}</div>
+                </div>
+                <div>
+                   <span style={{ fontSize: '0.85rem', color: 'var(--text-muted)' }}>Valor Original da Parcela</span>
+                   <div style={{ fontWeight: 600, color: 'white' }}>R$ {selectedInstallment.amount.toLocaleString('pt-BR', {minimumFractionDigits: 2, maximumFractionDigits: 2})}</div>
+                </div>
+                <div>
+                   <span style={{ fontSize: '0.85rem', color: 'var(--text-muted)' }}>Atraso Atual</span>
+                   <div style={{ fontWeight: 600, color: calculateDelay(selectedInstallment.due_date) > 0 ? 'var(--danger)' : 'var(--success)' }}>
+                     {calculateDelay(selectedInstallment.due_date)} dias
+                   </div>
+                </div>
+              </div>
+            </div>
+
+            <div style={{ background: 'rgba(245, 158, 11, 0.05)', padding: '1.5rem', borderRadius: '12px', border: '1px solid rgba(245, 158, 11, 0.1)' }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '0.5rem' }}>
+                <span style={{ color: 'var(--text-muted)' }}>Total Genuíno em Aberto:</span>
+                <span>R$ {selectedInstallment.amount.toLocaleString('pt-BR', {minimumFractionDigits: 2, maximumFractionDigits: 2})}</span>
+              </div>
+              <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '0.5rem' }}>
+                <span style={{ color: 'var(--text-muted)' }}>Acréscimos (Atraso):</span>
+                <span style={{ color: 'var(--warning)' }}>R$ 0,00</span>
+              </div>
+              <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '0.5rem' }}>
+                <span style={{ color: 'var(--text-muted)' }}>Desconto Autom. (Pontualidade):</span>
+                <span style={{ color: 'var(--success)' }}>
+                  {settings?.punctuality_discount_active && new Date().setHours(0,0,0,0) <= new Date(selectedInstallment.due_date).setHours(0,0,0,0) 
+                    ? `- R$ ${(selectedInstallment.amount * (settings.punctuality_discount_percent / 100)).toLocaleString('pt-BR', {minimumFractionDigits: 2, maximumFractionDigits: 2})}` 
+                    : 'R$ 0,00'}
+                </span>
+              </div>
+              <hr style={{ borderColor: 'rgba(255,255,255,0.1)', margin: '1rem 0' }} />
+              <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '1.2rem', fontWeight: 800 }}>
+                <span>Total a Receber Agora:</span>
+                <span>R$ {
+                  settings?.punctuality_discount_active && new Date().setHours(0,0,0,0) <= new Date(selectedInstallment.due_date).setHours(0,0,0,0)
+                  ? (selectedInstallment.amount - (selectedInstallment.amount * (settings.punctuality_discount_percent / 100))).toLocaleString('pt-BR', {minimumFractionDigits: 2, maximumFractionDigits: 2})
+                  : selectedInstallment.amount.toLocaleString('pt-BR', {minimumFractionDigits: 2, maximumFractionDigits: 2})
+                }</span>
+              </div>
+              <p style={{ fontSize: '0.8rem', color: 'var(--text-muted)', marginTop: '0.5rem', fontStyle: 'italic', textAlign: 'right' }}>*Módulo de multas/juros não ativo nativamente.</p>
+            </div>
+          </div>
+        )}
+      </Modal>
+
+      {/* MODAL PAGAMENTO */}
+      <Modal isOpen={isPaymentModalOpen} onClose={() => setIsPaymentModalOpen(false)} title="Baixar Parcela">
+        <form onSubmit={handlePayment}>
+          <div style={{ background: 'rgba(16, 185, 129, 0.1)', border: '1px solid rgba(16, 185, 129, 0.2)', padding: '1.5rem', borderRadius: '12px', marginBottom: '1.5rem', textAlign: 'center' }}>
+            <p style={{ fontSize: '0.9rem', color: 'var(--text-muted)' }}>Original da Parcela {selectedInstallment?.number}/{selectedInstallment?.total}</p>
+            <h3 style={{ fontSize: '2.5rem', margin: '0.5rem 0', color: 'var(--success)' }}>
+               R$ {selectedInstallment?.amount.toLocaleString('pt-BR', {minimumFractionDigits: 2, maximumFractionDigits: 2})}
+            </h3>
+            <p style={{ color: 'white' }}>{selectedInstallment?.productName}</p>
+          </div>
+
+          <div className="form-group" style={{ marginTop: '1rem' }}>
+            <label style={{ marginBottom: '0.5rem', display: 'block', color: autoDiscount > 0 ? 'var(--success)' : 'inherit' }}>
+              Desconto Concedido (R$) {autoDiscount > 0 && <strong>(Automático de Pontualidade)</strong>}
+            </label>
+            <input 
+              type="text" 
+              value={maskCurrency(discountAmount)} 
+              onChange={e => {
+                let val = parseCurrency(e.target.value) as number;
+                if (val > (selectedInstallment?.amount || 0)) val = selectedInstallment!.amount;
+                setDiscountAmount(val);
+                setPaymentAmount(selectedInstallment!.amount - val);
+              }} 
+              style={{ fontSize: '1.2rem', padding: '0.8rem', width: '100%', borderRadius: '8px', background: 'transparent', color: 'var(--text-main)', border: '1px solid var(--border-color)' }}
+            />
+          </div>
+
+          <div className="form-group" style={{ marginTop: '1rem' }}>
+            <label style={{ marginBottom: '0.5rem' }}>Valor a Receber (R$)</label>
+            <input 
+              type="text" 
+              required 
+              value={maskCurrency(paymentAmount)} 
+              onChange={e => {
+                let val = parseCurrency(e.target.value) as number;
+                const finalExpected = (selectedInstallment?.amount || 0) - discountAmount;
+                if (val > finalExpected) val = finalExpected;
+                setPaymentAmount(val);
+              }} 
+              style={{ fontSize: '1.5rem', fontWeight: 700, padding: '1rem', width: '100%', borderRadius: '8px', background: 'transparent', color: 'var(--text-main)', border: '1px solid var(--border-color)' }}
+            />
+            {paymentAmount < ((selectedInstallment?.amount || 0) - discountAmount) && paymentAmount > 0 && (
+              <p style={{ color: 'var(--warning)', marginTop: '0.5rem', fontSize: '0.85rem' }}>
+                Recebimento parcial! Restarão <strong>R$ {((selectedInstallment!.amount - discountAmount) - paymentAmount).toLocaleString('pt-BR', {minimumFractionDigits: 2, maximumFractionDigits: 2})}</strong> pendentes.
+              </p>
+            )}
+          </div>
+
+          {paymentAmount < ((selectedInstallment?.amount || 0) - discountAmount) && paymentAmount > 0 && (
+            <div className="form-group" style={{ marginTop: '1rem' }}>
+              <label style={{ color: 'var(--warning)' }}>Reagendar restante (Vencimento)</label>
+              <input 
+                type="date" 
+                required 
+                value={nextDueDate}
+                onChange={e => setNextDueDate(e.target.value)}
+                style={{ width: '100%', padding: '0.8rem', borderRadius: '8px', background: 'rgba(245, 158, 11, 0.1)', border: '1px solid rgba(245, 158, 11, 0.3)', color: 'var(--text-main)', marginTop: '0.5rem' }}
+              />
+            </div>
+          )}
+
+          <div className="form-group" style={{ marginTop: '1rem' }}>
+            <label style={{ marginBottom: '0.8rem' }}>Forma de Recebimento</label>
+            <div className="payment-methods-grid" style={{ display: 'flex', gap: '0.5rem' }}>
+              <label style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', cursor: 'pointer', background: paymentMethod === 'cash' ? 'rgba(99, 102, 241, 0.1)' : 'transparent', border: paymentMethod === 'cash' ? '1px solid var(--primary)' : '1px solid var(--border-color)', padding: '0.8rem', borderRadius: '8px', flex: 1, justifyContent: 'center' }}>
+                <input type="radio" name="method" checked={paymentMethod === 'cash'} onChange={() => setPaymentMethod('cash')} style={{display:'none'}} />
+                <span style={{ fontWeight: paymentMethod === 'cash' ? 600 : 400, color: paymentMethod === 'cash' ? 'var(--primary)' : 'var(--text-main)' }}>Dinheiro</span>
+              </label>
+              <label style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', cursor: 'pointer', background: paymentMethod === 'pix' ? 'rgba(99, 102, 241, 0.1)' : 'transparent', border: paymentMethod === 'pix' ? '1px solid var(--primary)' : '1px solid var(--border-color)', padding: '0.8rem', borderRadius: '8px', flex: 1, justifyContent: 'center' }}>
+                <input type="radio" name="method" checked={paymentMethod === 'pix'} onChange={() => setPaymentMethod('pix')} style={{display:'none'}} />
+                <span style={{ fontWeight: paymentMethod === 'pix' ? 600 : 400, color: paymentMethod === 'pix' ? 'var(--primary)' : 'var(--text-main)' }}>PIX</span>
+              </label>
+              <label style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', cursor: 'pointer', background: paymentMethod === 'card' ? 'rgba(99, 102, 241, 0.1)' : 'transparent', border: paymentMethod === 'card' ? '1px solid var(--primary)' : '1px solid var(--border-color)', padding: '0.8rem', borderRadius: '8px', flex: 1, justifyContent: 'center' }}>
+                <input type="radio" name="method" checked={paymentMethod === 'card'} onChange={() => setPaymentMethod('card')} style={{display:'none'}} />
+                <span style={{ fontWeight: paymentMethod === 'card' ? 600 : 400, color: paymentMethod === 'card' ? 'var(--primary)' : 'var(--text-main)' }}>Cartão</span>
+              </label>
+            </div>
+          </div>
+
+          <div className="form-actions" style={{ marginTop: '1.5rem', display: 'flex', gap: '1rem' }}>
+            <button type="button" className="btn-secondary" style={{ flex: 1 }} onClick={() => setIsPaymentModalOpen(false)}>Cancelar</button>
+            <button type="submit" className="btn-primary" style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '0.5rem', background: 'var(--success)' }}><CheckCircle size={18} /> Confirmar</button>
+          </div>
+        </form>
+      </Modal>
+
+      {showSuccess && (
+        <div style={{ position: 'fixed', bottom: '2rem', right: '2rem', background: 'var(--success)', color: 'white', padding: '1rem 1.5rem', borderRadius: '12px', display: 'flex', alignItems: 'center', gap: '1rem', fontWeight: 600, boxShadow: '0 10px 30px rgba(16, 185, 129, 0.3)', zIndex: 2000, animation: 'fadeIn 0.3s ease-out' }}>
+          <CheckCircle size={24} />
+          <span>Baixa de parcela efetuada com sucesso!</span>
+        </div>
+      )}
+    </div>
+  );
+}

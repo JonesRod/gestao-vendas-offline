@@ -1,0 +1,148 @@
+/* Receipts.css */
+.receipts-layout {
+  display: flex;
+  gap: 2rem;
+}
+
+.overview-panel {
+  width: 350px;
+}
+
+@media (max-width: 900px) {
+  .receipts-layout {
+    flex-direction: column-reverse;
+  }
+  .overview-panel {
+    width: 100%;
+  }
+}
+
+.debtor-row {
+  padding: 1.5rem;
+  border-radius: 12px;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+@media (max-width: 600px) {
+  .debtor-row {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 1rem;
+  }
+  .debtor-row .debtor-total {
+    align-items: flex-start !important;
+  }
+}
+
+.account-header {
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+  margin-bottom: 2rem;
+}
+
+.account-header-total {
+  margin-left: auto;
+  background: rgba(245, 158, 11, 0.1);
+  border: 1px solid rgba(245, 158, 11, 0.2);
+  padding: 0.75rem 1.5rem;
+  border-radius: 12px;
+  text-align: right;
+}
+
+@media (max-width: 768px) {
+  .account-header {
+    flex-direction: column;
+    align-items: flex-start;
+  }
+  .account-header-total {
+    margin-left: 0;
+    width: 100%;
+    text-align: left;
+  }
+}
+
+.installment-card {
+  padding: 1.5rem;
+  border-radius: 12px;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.installment-info {
+  display: flex;
+  gap: 2rem;
+  align-items: center;
+}
+
+.installment-actions {
+  display: flex;
+  align-items: center;
+  gap: 1.5rem;
+}
+
+.installment-actions-btns {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+
+@media (max-width: 768px) {
+  .installment-card {
+    flex-direction: column;
+    align-items: stretch;
+    gap: 1.5rem;
+  }
+  
+  .installment-info {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 1rem;
+  }
+  
+  .installment-actions {
+    flex-direction: column;
+    align-items: stretch;
+    gap: 1rem;
+  }
+  
+  .installment-actions-btns {
+    flex-direction: row;
+  }
+  
+  .installment-actions-btns > button {
+    flex: 1;
+  }
+
+  .installment-actions .amount-display {
+    text-align: left !important;
+  }
+}
+
+.details-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 1rem;
+}
+
+@media (max-width: 600px) {
+  .details-grid {
+    grid-template-columns: 1fr;
+  }
+}
+
+.payment-methods-grid {
+  display: flex;
+  gap: 1rem;
+}
+
+@media (max-width: 600px) {
+  .payment-methods-grid {
+    flex-direction: column;
+  }
+}

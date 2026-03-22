@@ -1,0 +1,174 @@
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap');
+
+:root {
+  --bg-main: #0f172a;
+  --bg-panel: #1e293b;
+  --bg-panel-hover: #334155;
+  --primary: #6366f1;
+  --primary-hover: #4f46e5;
+  --text-main: #f8fafc;
+  --text-muted: #cbd5e1;
+  --border-color: rgba(255, 255, 255, 0.15);
+  --success: #10b981;
+  --danger: #ef4444;
+  --warning: #f59e0b;
+  --bg-accent: #1e1b4b;
+  --bg-glass: rgba(30, 41, 59, 0.9);
+  --glass-blur: 12px;
+}
+
+[data-theme="light"] {
+  --bg-main: #f1f5f9;
+  --bg-panel: #ffffff;
+  --bg-panel-hover: #f8fafc;
+  --primary: #4f46e5;
+  --primary-hover: #4338ca;
+  --text-main: #0f172a;
+  --text-muted: #334155;
+  --border-color: rgba(0, 0, 0, 0.15);
+  --success: #059669;
+  --danger: #dc2626;
+  --warning: #d97706;
+  --bg-accent: #eef2ff;
+  --bg-glass: #ffffff;
+  --glass-blur: 0px;
+}
+
+* {
+  margin: 0;
+  padding: 0;
+  box-sizing: border-box;
+}
+
+body {
+  font-family: 'Inter', sans-serif;
+  background-color: var(--bg-main);
+  color: var(--text-main);
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+/* Glassmorphism utility */
+.glass-panel {
+  background: var(--bg-glass);
+  backdrop-filter: blur(var(--glass-blur));
+  -webkit-backdrop-filter: blur(var(--glass-blur));
+  border: 1px solid var(--border-color);
+  border-radius: 16px;
+  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.08);
+}
+
+/* Common Layout */
+.app-container {
+  display: flex;
+  height: 100vh;
+  width: 100vw;
+  overflow: hidden;
+  background: var(--bg-main);
+}
+
+.main-content {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  overflow-y: auto;
+  padding: 2rem;
+  background: radial-gradient(circle at top right, var(--bg-accent) 0%, var(--bg-main) 40%);
+}
+
+.page-title {
+  font-size: 2rem;
+  font-weight: 700;
+  margin-bottom: 1rem;
+  color: var(--text-main);
+}
+
+.page-header {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 1rem;
+  margin-bottom: 1.5rem;
+}
+
+.page-header .page-title {
+  margin-bottom: 0;
+}
+
+/* Responsividade Global */
+@media (max-width: 768px) {
+  .app-container {
+    flex-direction: column;
+  }
+
+  .main-content {
+    padding: 1rem;
+  }
+
+  .page-header {
+    flex-direction: column;
+    align-items: stretch;
+    gap: 1rem;
+  }
+
+  .search-filters {
+    flex-direction: column;
+  }
+
+  .filter-pills {
+    justify-content: center;
+    flex-wrap: wrap;
+  }
+
+  /* Helper para tabelas repsonsivas virarem cards no celular */
+  .responsive-table, .responsive-table tbody, .responsive-table tr, .responsive-table td {
+    display: block;
+    width: 100%;
+  }
+  
+  .responsive-table thead {
+    display: none; /* Esconde o header na horizontal */
+  }
+  
+  .responsive-table tr {
+    margin-bottom: 1rem;
+    border: 1px solid var(--border-color) !important;
+    border-radius: 12px;
+    padding: 0.5rem;
+    background: rgba(255,255,255,0.02);
+  }
+  
+  .responsive-table td {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 0.75rem 0.5rem !important;
+    border-bottom: 1px solid rgba(255,255,255,0.05) !important;
+    text-align: right !important; /* Alinha o valor pro final */
+  }
+  
+  .responsive-table td:last-child {
+    border-bottom: none !important;
+  }
+  
+  /* Injeta o nome da coluna via data-label */
+  .responsive-table td::before {
+    content: attr(data-label);
+    font-size: 0.8rem;
+    color: var(--text-muted);
+    font-weight: 600;
+    text-align: left;
+    margin-right: 1rem;
+  }
+
+  .responsive-table .btn-group {
+    width: 100%;
+    display: grid !important;
+    grid-template-columns: 1fr 1fr;
+    gap: 0.5rem;
+  }
+  .responsive-table .btn-group > button {
+    justify-content: center;
+    padding: 0.8rem !important;
+  }
+}
