@@ -5,7 +5,39 @@
   display: flex;
   flex-direction: column;
   padding: 1.5rem;
-  transition: all 0.3s ease;
+  transition: width 0.3s ease, padding 0.3s ease;
+}
+
+.sidebar.collapsed {
+  width: 88px;
+  padding: 1.5rem 0.5rem;
+}
+
+.btn-collapse {
+  background: transparent;
+  border: none;
+  color: var(--text-muted);
+  cursor: pointer;
+  padding: 0.5rem;
+  border-radius: 8px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: all 0.2s;
+  margin-left: auto;
+}
+
+.btn-collapse:hover {
+  background: rgba(255,255,255,0.1);
+  color: var(--text-main);
+}
+
+.sidebar.collapsed .sidebar-header {
+  flex-direction: column;
+  gap: 0.5rem;
+}
+.sidebar.collapsed .btn-collapse {
+  margin-left: 0;
 }
 
 .sidebar-header {
@@ -58,6 +90,14 @@
   overflow: hidden;
 }
 
+.sidebar.collapsed .nav-item {
+  justify-content: center;
+  padding: 12px;
+}
+.sidebar.collapsed .nav-item .nav-icon {
+  margin: 0;
+}
+
 .nav-item:hover {
   background: var(--bg-panel-hover);
   color: var(--text-main);
@@ -89,6 +129,11 @@
   background: rgba(0,0,0,0.2);
   cursor: pointer;
   transition: background 0.2s;
+}
+
+.user-profile.collapsed {
+  justify-content: center;
+  padding: 8px 0;
 }
 
 .user-profile:hover {

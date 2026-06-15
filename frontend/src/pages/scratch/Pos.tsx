@@ -1,6 +1,5 @@
-import { AlertCircle, Banknote, CheckCircle, CreditCard, Search, ShoppingCart, Trash2, UserCheck, UserPlus, X, FileText, Printer, MapPin } from 'lucide-react';
+import { AlertCircle, Banknote, CheckCircle, CreditCard, Search, ShoppingCart, Trash2, UserCheck, UserPlus, X, FileText, Printer } from 'lucide-react';
 import { useState, useEffect } from 'react';
-import { useNavigate } from 'react-router-dom';
 import { api } from '../services/api';
 import type { Customer, Product, Sale } from '../db/db';
 import './Pos.css';
@@ -11,17 +10,11 @@ export default function Pos() {
   const [paymentMethod, setPaymentMethod] = useState<'cash' | 'credit'>('cash');
   const [selectedCustomer, setSelectedCustomer] = useState<Customer | null>(null);
   const [customerSearch, setCustomerSearch] = useState('');
-  const navigate = useNavigate();
 
   // UI states
   const [showSuccess, setShowSuccess] = useState(false);
   const [showDueDateModal, setShowDueDateModal] = useState(false);
-  const [showAddressModal, setShowAddressModal] = useState(false);
   const [dueDate, setDueDate] = useState('');
-  const [saleDate, setSaleDate] = useState<string>(new Date().toISOString().split('T')[0]);
-  const [manualInvoiceNumber, setManualInvoiceNumber] = useState<string>('');
-  const [alertMessage, setAlertMessage] = useState<string | null>(null);
-  const [itemToDelete, setItemToDelete] = useState<number | null>(null);
 
   const [products, setProducts] = useState<Product[]>([]);
   const [customers, setCustomers] = useState<Customer[]>([]);
@@ -115,23 +108,23 @@ export default function Pos() {
     if (paymentMethod === 'credit') {
       const forbiddenProducts = cart.filter(item => item.allow_credit === false);
       if (forbiddenProducts.length > 0) {
-        setAlertMessage("Há itens no carrinho que NÃO permitem venda a prazo (fiado): " + forbiddenProducts.map(i => i.name).join(', '));
+        alert("Há itens no carrinho que NÃO permitem venda a prazo (fiado): " + forbiddenProducts.map(i => i.name).join(', '));
         return;
       }
 
       if (!selectedCustomer) {
-        setAlertMessage("Para vendas a prazo/fiado, é obrigatório vincular um cliente!");
+        alert("Para vendas a prazo/fiado, é obrigatório vincular um cliente!");
         return;
       }
 
       if (selectedCustomer.is_blocked) {
-        setAlertMessage("Cliente bloqueado para compras a prazo!");
+        alert("Cliente bloqueado para compras a prazo!");
         return;
       }
 
       const availableCredit = selectedCustomer.credit_limit - selectedCustomer.credit_used;
       if (currentTotal > availableCredit) {
-        setAlertMessage(`Limite insuficiente! Limite disponível: R$ ${availableCredit.toLocaleString('pt-BR', {minimumFractionDigits: 2, maximumFractionDigits: 2})}`);
+        alert(`Limite insuficiente! Limite disponível: R$ ${availableCredit.toLocaleString('pt-BR', {minimumFractionDigits: 2, maximumFractionDigits: 2})}`);
         return;
       }
 
@@ -177,9 +170,8 @@ export default function Pos() {
         totalAmount: currentTotal,
         paymentMethod: paymentMethod,
         status: paymentMethod === 'credit' ? 'pending' : 'paid',
-        date: new Date(saleDate + 'T12:00:00Z'),
+        date: new Date(),
         due_date: paymentMethod === 'credit' ? new Date(dueDate) : undefined,
-        invoice_number: manualInvoiceNumber || undefined,
         items: cart.map(item => ({
           productId: item.id,
           quantity: item.quantity,
@@ -195,8 +187,6 @@ export default function Pos() {
       setPaymentMethod('cash');
       setCustomerSearch('');
       setSearchTerm('');
-      setSaleDate(new Date().toISOString().split('T')[0]);
-      setManualInvoiceNumber('');
       setShowDueDateModal(false);
       setShowSuccess(true);
       
@@ -206,46 +196,35 @@ export default function Pos() {
 
     } catch (error) {
       console.error("Erro ao salvar venda:", error);
-      setAlertMessage("Houve um erro ao tentar salvar a venda no banco de dados central.");
+      alert("Houve um erro ao tentar salvar a venda no banco de dados central.");
     }
   };
 
   return (
     <div className="pos-dashboard">
-      <h1 className="page-title" style={{ marginBottom: '1.5rem', color: 'var(--text-main)', fontSize: '1.8rem', fontWeight: '700' }}>Ponto de Venda (PDV)</h1>
       <div className="pos-header-section glass-panel">
         <div className="customer-selection">
-          <div style={{ flex: 2, position: 'relative' }}>
-            <h3 style={{ fontSize: '1rem', color: 'var(--text-main)', marginBottom: '0.8rem', fontWeight: '600' }}>1. Selecione o Cliente (Opcional)</h3>
-            <div className="search-box">
-              <Search size={20} className="text-muted" />
-              <input
-                type="text"
-                placeholder="Identificar Cliente por Nome, CPF ou Telefone..."
-                value={customerSearch}
-                onChange={(e) => setCustomerSearch(e.target.value)}
-              />
-            </div>
-            {filteredCustomers.length > 0 && (
-              <div className="customer-dropdown">
-                {filteredCustomers.map(customer => (
-                  <div key={customer.id} className={`customer-item ${customer.is_blocked ? 'blocked' : ''}`} onClick={() => handleSelectCustomer(customer)}>
-                    <span className="customer-name-dropdown" title={customer.name}>{customer.name} {customer.is_loyal && <span style={{color: '#3b82f6', fontSize: '0.8rem', marginLeft: '8px', background: 'rgba(59, 130, 246, 0.1)', padding: '2px 6px', borderRadius: '4px'}}>★ Fiel</span>}</span>
-                  </div>
-                ))}
-              </div>
-            )}
-          </div>
-          
-          <div className="date-picker-box" style={{ flex: 1 }}>
-            <h3 style={{ fontSize: '1rem', color: 'var(--text-main)', marginBottom: '0.8rem', fontWeight: '600' }}>2. Data da Venda</h3>
-            <input 
-              type="date" 
-              value={saleDate} 
-              onChange={(e) => setSaleDate(e.target.value)} 
-              style={{ width: '100%', padding: '0.8rem', borderRadius: '8px', border: '1px solid var(--border-color)', background: 'transparent', color: 'var(--text-main)', fontSize: '1rem' }} 
+          <div className="search-box">
+            <Search size={20} className="text-muted" />
+            <input
+              type="text"
+              placeholder="Identificar Cliente por Nome, CPF ou Telefone..."
+              value={customerSearch}
+              onChange={(e) => setCustomerSearch(e.target.value)}
             />
           </div>
+          {filteredCustomers.length > 0 && (
+            <div className="customer-dropdown">
+              {filteredCustomers.map(customer => (
+                <div key={customer.id} className={`customer-item ${customer.is_blocked ? 'blocked' : ''}`} onClick={() => handleSelectCustomer(customer)}>
+                  <span>{customer.name} - {customer.phone}</span>
+                  <span className={customer.credit_limit - customer.credit_used <= 0 ? 'text-danger' : 'text-success'}>
+                    Livre: R$ {(customer.credit_limit - customer.credit_used).toLocaleString('pt-BR', {minimumFractionDigits: 2, maximumFractionDigits: 2})}
+                  </span>
+                </div>
+              ))}
+            </div>
+          )}
         </div>
 
         <div className="customer-info-panel">
@@ -253,12 +232,7 @@ export default function Pos() {
             <div className="customer-details">
               <div className="info-block">
                 <span className="label">Cliente</span>
-                <strong className="value" style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
-                  {selectedCustomer.name}
-                  {selectedCustomer.is_loyal && (
-                    <span className="badge success" style={{ background: 'rgba(59, 130, 246, 0.2)', color: '#3b82f6', border: '1px solid rgba(59, 130, 246, 0.4)', padding: '2px 6px', fontSize: '0.7rem' }}>★ Fiel</span>
-                  )}
-                </strong>
+                <strong className="value">{selectedCustomer.name}</strong>
               </div>
               <div className="info-block">
                 <span className="label">CPF/CNPJ</span>
@@ -270,21 +244,9 @@ export default function Pos() {
                   R$ {(selectedCustomer.credit_limit - selectedCustomer.credit_used).toLocaleString('pt-BR', {minimumFractionDigits: 2, maximumFractionDigits: 2})}
                 </strong>
               </div>
-              <div style={{ display: 'flex', gap: '0.5rem', alignItems: 'center' }}>
-                <button 
-                  className="btn-location" 
-                  title="Ver Endereço"
-                  onClick={() => setShowAddressModal(true)}
-                  style={{ background: 'transparent', border: 'none', color: 'var(--primary)', cursor: 'pointer', padding: '0.5rem', borderRadius: '50%', transition: 'background 0.2s' }}
-                  onMouseOver={(e) => e.currentTarget.style.background = 'rgba(99, 102, 241, 0.1)'}
-                  onMouseOut={(e) => e.currentTarget.style.background = 'transparent'}
-                >
-                  <MapPin size={20} />
-                </button>
-                <button className="btn-remove-customer" onClick={handleClearCustomer} title="Remover Cliente">
-                  <X size={20} />
-                </button>
-              </div>
+              <button className="btn-remove-customer" onClick={handleClearCustomer} title="Remover Cliente">
+                <X size={20} />
+              </button>
             </div>
           ) : (
             <div className="no-customer-selected">
@@ -297,7 +259,7 @@ export default function Pos() {
       <div className="pos-middle-section">
         <div className="history-panel glass-panel">
           <div className="panel-header">
-            <h3>3. Histórico de Compras a Prazo</h3>
+            <h3>Histórico de Compras a Prazo</h3>
             {selectedCustomer && pendingSales.length > 0 && (
               <span className="badge-warning">{pendingSales.length} em aberto</span>
             )}
@@ -329,11 +291,24 @@ export default function Pos() {
             )}
           </div>
         </div>
+
+        <div className="actions-panel glass-panel">
+          <h3>Ações Rápidas</h3>
+          <div className="action-buttons">
+            <button className="btn-action" disabled={!selectedCustomer}>
+              <Banknote size={24} />
+              Receber Conta
+            </button>
+            <button className="btn-action" disabled={!selectedCustomer}>
+              <Printer size={24} />
+              Imprimir Comprovantes
+            </button>
+          </div>
+        </div>
       </div>
 
       <div className="pos-bottom-section glass-panel">
         <div className="products-selection-area">
-          <h3 style={{ fontSize: '1rem', color: 'var(--text-main)', marginBottom: '1rem', fontWeight: '600' }}>4. Produtos da Venda</h3>
           <div className="product-search-box">
             <Search size={20} className="text-muted" />
             <input
@@ -362,20 +337,6 @@ export default function Pos() {
 
         <div className="cart-area">
           <div className="cart-table-container">
-            <div className="payment-method-selector-horizontal">
-              <button
-                className={`method-btn ${paymentMethod === 'cash' ? 'active' : ''}`}
-                onClick={() => setPaymentMethod('cash')}
-              >
-                <Banknote size={18} /> Dinheiro/Pix
-              </button>
-              <button
-                className={`method-btn ${paymentMethod === 'credit' ? 'active' : ''}`}
-                onClick={() => setPaymentMethod('credit')}
-              >
-                <CreditCard size={18} /> Prazo/Cartão
-              </button>
-            </div>
             <table className="cart-table">
               <thead>
                 <tr>
@@ -428,7 +389,7 @@ export default function Pos() {
                         )}
                         <td className="font-bold">R$ {(itemPrice * item.quantity).toLocaleString('pt-BR', {minimumFractionDigits: 2})}</td>
                         <td>
-                          <button className="btn-remove-item" onClick={() => setItemToDelete(item.id)}>
+                          <button className="btn-remove-item" onClick={() => removeFromCart(item.id)}>
                             <Trash2 size={16} />
                           </button>
                         </td>
@@ -439,40 +400,43 @@ export default function Pos() {
               </tbody>
             </table>
           </div>
-        </div>
 
-        <div className="checkout-sidebar checkout-footer" style={{ gap: '2rem' }}>
-          <div className="manual-invoice-box" style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem', marginRight: 'auto' }}>
-            <label style={{ fontSize: '0.85rem', color: 'var(--text-muted)', fontWeight: '500' }}>Número da Nota (Manual)</label>
-            <input 
-              type="text" 
-              placeholder="Ex: 00145 (Opcional)" 
-              value={manualInvoiceNumber} 
-              onChange={(e) => setManualInvoiceNumber(e.target.value)} 
-              style={{ width: '100%', minWidth: '180px', padding: '0.8rem', borderRadius: '8px', border: '1px solid var(--border-color)', background: 'rgba(0,0,0,0.2)', color: 'var(--text-main)', fontSize: '1rem' }} 
-            />
-            <span style={{ fontSize: '0.7rem', color: 'var(--text-muted)' }}>Se vazio, usa numeração online gerada.</span>
+          <div className="checkout-sidebar">
+            <div className="payment-method-selector-horizontal">
+              <button
+                className={`method-btn ${paymentMethod === 'cash' ? 'active' : ''}`}
+                onClick={() => setPaymentMethod('cash')}
+              >
+                <Banknote size={18} /> Din/Pix
+              </button>
+              <button
+                className={`method-btn ${paymentMethod === 'credit' ? 'active' : ''}`}
+                onClick={() => setPaymentMethod('credit')}
+              >
+                <CreditCard size={18} /> Prazo/Cartão
+              </button>
+            </div>
+
+            <div className="totals-block">
+               <div className="total-row">
+                 <span>Subtotal:</span>
+                 <span>R$ {currentTotal.toLocaleString('pt-BR', {minimumFractionDigits: 2})}</span>
+               </div>
+               <div className="total-row grand-total">
+                 <span>Total a Pagar:</span>
+                 <span className="value">R$ {currentTotal.toLocaleString('pt-BR', {minimumFractionDigits: 2})}</span>
+               </div>
+            </div>
+
+            <button
+              className="btn-primary checkout-btn-large"
+              disabled={cart.length === 0}
+              onClick={handleFinalizeSale}
+            >
+              <CheckCircle size={20} />
+              Finalizar Venda
+            </button>
           </div>
-
-          <div className="totals-block">
-             <div className="total-row">
-               <span>Subtotal:</span>
-               <span>R$ {currentTotal.toLocaleString('pt-BR', {minimumFractionDigits: 2})}</span>
-             </div>
-             <div className="total-row grand-total">
-               <span>Total a Pagar:</span>
-               <span className="value">R$ {currentTotal.toLocaleString('pt-BR', {minimumFractionDigits: 2})}</span>
-             </div>
-          </div>
-
-          <button
-            className="btn-primary checkout-btn-large"
-            disabled={cart.length === 0}
-            onClick={handleFinalizeSale}
-          >
-            <CheckCircle size={20} />
-            Finalizar Venda
-          </button>
         </div>
       </div>
 
@@ -516,123 +480,6 @@ export default function Pos() {
           </div>
         </div>
       )}
-      {showAddressModal && selectedCustomer && (
-        <div className="modal-overlay">
-          <div className="modal-content glass-panel" style={{ maxWidth: '400px' }}>
-            <div className="modal-header">
-              <h3>Endereço do Cliente</h3>
-              <button className="btn-close" onClick={() => setShowAddressModal(false)}><X size={20} /></button>
-            </div>
-            <div className="modal-body" style={{ display: 'flex', flexDirection: 'column', gap: '1rem', marginTop: '1rem' }}>
-              {(selectedCustomer.street || (selectedCustomer.address && selectedCustomer.address.street)) ? (
-                <>
-                  <div>
-                    <label style={{ fontSize: '0.8rem', color: 'var(--text-muted)' }}>Rua</label>
-                    <div style={{ fontWeight: 500, fontSize: '1rem' }}>{selectedCustomer.street || selectedCustomer.address?.street}, Nº {selectedCustomer.number || selectedCustomer.address?.number}</div>
-                  </div>
-                  <div>
-                    <label style={{ fontSize: '0.8rem', color: 'var(--text-muted)' }}>Bairro</label>
-                    <div style={{ fontWeight: 500, fontSize: '1rem' }}>{selectedCustomer.neighborhood || selectedCustomer.address?.neighborhood}</div>
-                  </div>
-                  <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem' }}>
-                    <div>
-                      <label style={{ fontSize: '0.8rem', color: 'var(--text-muted)' }}>Cidade</label>
-                      <div style={{ fontWeight: 500, fontSize: '1rem' }}>{selectedCustomer.city || selectedCustomer.address?.city} - {selectedCustomer.state || selectedCustomer.address?.state}</div>
-                    </div>
-                    <div>
-                      <label style={{ fontSize: '0.8rem', color: 'var(--text-muted)' }}>CEP</label>
-                      <div style={{ fontWeight: 500, fontSize: '1rem' }}>{selectedCustomer.cep || selectedCustomer.address?.cep}</div>
-                    </div>
-                  </div>
-                  {(selectedCustomer.observation || selectedCustomer.address?.observation) && (
-                    <div>
-                      <label style={{ fontSize: '0.8rem', color: 'var(--text-muted)' }}>Observação</label>
-                      <div style={{ fontWeight: 500, fontSize: '1rem' }}>{selectedCustomer.observation || selectedCustomer.address?.observation}</div>
-                    </div>
-                  )}
-                </>
-              ) : (
-                <div style={{ textAlign: 'center', color: 'var(--text-muted)', padding: '2rem 0' }}>
-                  Nenhum endereço cadastrado para {selectedCustomer.name}.
-                </div>
-              )}
-              <div style={{ display: 'flex', gap: '1rem', marginTop: '1rem' }}>
-                <button 
-                  className="btn-secondary" 
-                  style={{ flex: 1, padding: '0.8rem', borderRadius: '8px', background: 'transparent', color: 'var(--text-main)', border: '1px solid var(--border-color)', cursor: 'pointer' }}
-                  onClick={() => navigate('/customers', { state: { editCustomerId: selectedCustomer.id } })}
-                >
-                  Editar Cliente
-                </button>
-                <button 
-                  className="btn-primary" 
-                  style={{ flex: 1, padding: '0.8rem', borderRadius: '8px', background: 'var(--primary)', color: 'white', border: 'none', cursor: 'pointer' }}
-                  onClick={() => setShowAddressModal(false)}
-                >
-                  Fechar
-                </button>
-              </div>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* MODAL DE ALERTA CENTRALIZADO */}
-      {alertMessage && (
-        <div className="modal-overlay" style={{ zIndex: 9999 }} onClick={() => setAlertMessage(null)}>
-          <div className="modal-content glass-panel" style={{ maxWidth: '400px', textAlign: 'center' }} onClick={e => e.stopPropagation()}>
-            <div className="modal-header" style={{ borderBottom: 'none', justifyContent: 'center', paddingBottom: '0' }}>
-              <AlertCircle size={48} color="var(--danger)" style={{ marginBottom: '1rem' }} />
-            </div>
-            <div className="modal-body" style={{ padding: '0 1.5rem 2rem' }}>
-              <h2 style={{ fontSize: '1.2rem', marginBottom: '1rem', color: 'var(--text-main)' }}>Atenção</h2>
-              <p style={{ color: 'var(--text-muted)', marginBottom: '1.5rem' }}>{alertMessage}</p>
-              <button 
-                className="btn-primary" 
-                style={{ width: '100%', padding: '0.8rem', borderRadius: '8px', background: 'var(--primary)', color: 'white', border: 'none', cursor: 'pointer' }}
-                onClick={() => setAlertMessage(null)}
-              >
-                Entendi
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* MODAL DE EXCLUSÃO DE ITEM */}
-      {itemToDelete !== null && (
-        <div className="modal-overlay" style={{ zIndex: 9999 }} onClick={() => setItemToDelete(null)}>
-          <div className="modal-content glass-panel" style={{ maxWidth: '400px', textAlign: 'center' }} onClick={e => e.stopPropagation()}>
-            <div className="modal-header" style={{ borderBottom: 'none', justifyContent: 'center', paddingBottom: '0' }}>
-              <Trash2 size={48} color="var(--danger)" style={{ marginBottom: '1rem' }} />
-            </div>
-            <div className="modal-body" style={{ padding: '0 1.5rem 2rem' }}>
-              <h2 style={{ fontSize: '1.2rem', marginBottom: '1rem', color: 'var(--text-main)' }}>Remover Item</h2>
-              <p style={{ color: 'var(--text-muted)', marginBottom: '1.5rem' }}>Tem certeza que deseja remover este item da venda?</p>
-              <div style={{ display: 'flex', gap: '1rem' }}>
-                <button 
-                  className="btn-secondary" 
-                  style={{ flex: 1, padding: '0.8rem', borderRadius: '8px', background: 'transparent', color: 'var(--text-main)', border: '1px solid var(--border-color)', cursor: 'pointer' }}
-                  onClick={() => setItemToDelete(null)}
-                >
-                  Cancelar
-                </button>
-                <button 
-                  className="btn-primary" 
-                  style={{ flex: 1, padding: '0.8rem', borderRadius: '8px', background: 'var(--danger)', color: 'white', border: 'none', cursor: 'pointer' }}
-                  onClick={() => {
-                    removeFromCart(itemToDelete);
-                    setItemToDelete(null);
-                  }}
-                >
-                  Remover
-                </button>
-              </div>
-            </div>
-          </div>
-        </div>
-      )}
-
     </div>
   );
 }

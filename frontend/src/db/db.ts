@@ -21,9 +21,17 @@ export interface Customer {
   credit_limit: number;
   credit_used: number;
   is_blocked: boolean;
+  is_loyal?: boolean;
   due_date: number;
   status?: 'ativo' | 'espera' | 'serasa';
   address?: Address;
+  cep?: string;
+  street?: string;
+  number?: string;
+  neighborhood?: string;
+  city?: string;
+  state?: string;
+  observation?: string;
   created_at: Date;
 }
 
@@ -66,6 +74,7 @@ export interface Sale {
   status: 'paid' | 'pending';
   date: Date;
   due_date?: Date;
+  invoice_number?: string;
 }
 
 export interface Installment {

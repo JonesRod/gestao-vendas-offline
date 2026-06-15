@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { NavLink, useNavigate } from 'react-router-dom';
-import { LayoutDashboard, ShoppingCart, Users, Package, Settings, Store, Briefcase, FileText, Receipt, Palette, Moon, Sun, Menu, X, LogOut } from 'lucide-react';
+import { LayoutDashboard, ShoppingCart, Users, Package, Settings, Store, Briefcase, FileText, Receipt, Palette, Moon, Sun, Menu, X, LogOut, ChevronLeft, ChevronRight } from 'lucide-react';
 import Modal from './Modal';
 import { useAuth } from '../contexts/AuthContext';
 import './Sidebar.css';
@@ -20,6 +20,7 @@ export default function Sidebar() {
   const [isThemeModalOpen, setIsThemeModalOpen] = useState(false);
   const [theme, setTheme] = useState<'dark'|'light'>('dark');
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
+  const [isCollapsed, setIsCollapsed] = useState(false);
   const { logout } = useAuth();
   const navigate = useNavigate();
 
@@ -33,7 +34,17 @@ export default function Sidebar() {
          document.documentElement.removeAttribute('data-theme');
       }
     }
+    
+    const savedCollapsed = localStorage.getItem('sidebar_collapsed');
+    if (savedCollapsed === 'true') {
+      setIsCollapsed(true);
+    }
   }, []);
+
+  const toggleCollapse = () => {
+    setIsCollapsed(!isCollapsed);
+    localStorage.setItem('sidebar_collapsed', (!isCollapsed).toString());
+  };
 
   const changeTheme = (newTheme: 'dark'|'light') => {
     setTheme(newTheme);
@@ -67,13 +78,16 @@ export default function Sidebar() {
 
       {isMobileMenuOpen && <div className="sidebar-overlay" onClick={() => setIsMobileMenuOpen(false)}></div>}
 
-      <aside className={`sidebar glass-panel ${isMobileMenuOpen ? 'open' : ''}`}>
+      <aside className={`sidebar glass-panel ${isMobileMenuOpen ? 'open' : ''} ${isCollapsed ? 'collapsed' : ''}`}>
         <div className="sidebar-header hide-on-mobile">
           <div className="logo-icon">
-          <Store size={28} color="#f8fafc" />
+            <Store size={28} color="#f8fafc" />
+          </div>
+          {!isCollapsed && <h1 className="logo-text">Gestão<span>Pro</span></h1>}
+          <button className="btn-collapse" onClick={toggleCollapse} title={isCollapsed ? "Expandir" : "Recolher"}>
+            {isCollapsed ? <ChevronRight size={20} /> : <ChevronLeft size={20} />}
+          </button>
         </div>
-        <h1 className="logo-text">Gestão<span>Pro</span></h1>
-      </div>
 
       <nav className="sidebar-nav">
         {navItems.map((item) => {
@@ -84,31 +98,34 @@ export default function Sidebar() {
                 to={item.path}
                 className={({ isActive }) => `nav-item ${isActive ? 'active' : ''}`}
                 onClick={() => setIsMobileMenuOpen(false)}
+                title={isCollapsed ? item.label : undefined}
               >
               <Icon size={20} className="nav-icon" />
-              <span className="nav-label">{item.label}</span>
+              {!isCollapsed && <span className="nav-label">{item.label}</span>}
             </NavLink>
           );
         })}
       </nav>
 
       <div className="sidebar-footer" style={{ borderTop: '1px solid var(--border-color)', paddingTop: '1rem', marginTop: 'auto' }}>
-        <button onClick={() => setIsThemeModalOpen(true)} className="nav-item" style={{ background: 'transparent', border: 'none', cursor: 'pointer', outline: 'none', width: '100%', display: 'flex', alignItems: 'center', gap: '0.8rem', color: 'var(--text-muted)', marginBottom: '0.5rem', padding: '0.6rem 0.8rem' }}>
+        <button onClick={() => setIsThemeModalOpen(true)} className="nav-item" style={{ background: 'transparent', border: 'none', cursor: 'pointer', outline: 'none', width: '100%', display: 'flex', alignItems: 'center', gap: '0.8rem', color: 'var(--text-muted)', marginBottom: '0.5rem', padding: '0.6rem 0.8rem' }} title={isCollapsed ? "Aparência" : undefined}>
            <Palette size={20} className="nav-icon" />
-           <span className="nav-label" style={{ fontWeight: 500 }}>Aparência</span>
+           {!isCollapsed && <span className="nav-label" style={{ fontWeight: 500 }}>Aparência</span>}
         </button>
         
-        <button onClick={handleLogout} className="nav-item" style={{ background: 'transparent', border: 'none', cursor: 'pointer', outline: 'none', width: '100%', display: 'flex', alignItems: 'center', gap: '0.8rem', color: 'var(--danger)', marginBottom: '1rem', padding: '0.6rem 0.8rem' }}>
+        <button onClick={handleLogout} className="nav-item" style={{ background: 'transparent', border: 'none', cursor: 'pointer', outline: 'none', width: '100%', display: 'flex', alignItems: 'center', gap: '0.8rem', color: 'var(--danger)', marginBottom: '1rem', padding: '0.6rem 0.8rem' }} title={isCollapsed ? "Sair" : undefined}>
            <LogOut size={20} className="nav-icon" style={{ color: 'var(--danger)' }} />
-           <span className="nav-label" style={{ fontWeight: 500 }}>Sair</span>
+           {!isCollapsed && <span className="nav-label" style={{ fontWeight: 500 }}>Sair</span>}
         </button>
 
-        <div className="user-profile">
+        <div className={`user-profile ${isCollapsed ? 'collapsed' : ''}`} title={isCollapsed ? "João Doe" : undefined}>
           <div className="avatar">JD</div>
-          <div className="user-info">
-            <p className="user-name">João Doe</p>
-            <p className="user-role">Administrador</p>
-          </div>
+          {!isCollapsed && (
+            <div className="user-info">
+              <p className="user-name">João Doe</p>
+              <p className="user-role">Administrador</p>
+            </div>
+          )}
         </div>
       </div>
 

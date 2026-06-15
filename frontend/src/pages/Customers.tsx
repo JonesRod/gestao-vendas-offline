@@ -1,4 +1,5 @@
 import { useState, useEffect } from 'react';
+import { useLocation } from 'react-router-dom';
 import { Search, Plus, UserX, UserCheck, Edit, DollarSign, Trash2 } from 'lucide-react';
 import { api } from '../services/api';
 import type { Customer } from '../db/db';
@@ -11,11 +12,12 @@ export default function Customers() {
   const [filter, setFilter] = useState<'all' | 'credit' | 'blocked'>('all');
   const [isModalOpen, setIsModalOpen] = useState(false);
   const initialFormState: Partial<Customer> = {
-    name: '', phone: '', cpf: '', email: '', birth_date: '', credit_limit: 0, is_blocked: false, status: 'ativo', due_date: 5,
+    name: '', phone: '', cpf: '', email: '', birth_date: '', credit_limit: 0, is_blocked: false, is_loyal: false, status: 'ativo', due_date: 5,
     address: { cep: '', street: '', number: '', neighborhood: '', city: '', state: '', observation: '' }
   };
   const [formData, setFormData] = useState<Partial<Customer>>(initialFormState);
   const [customers, setCustomers] = useState<Customer[]>([]);
+  const location = useLocation();
 
   const fetchCustomers = async () => {
     try {
@@ -34,6 +36,15 @@ export default function Customers() {
         }
       }));
       setCustomers(formatted);
+      
+      // Auto-open modal se vier do redirecionamento
+      if (location.state?.editCustomerId) {
+        const customerToEdit = formatted.find((c: Customer) => c.id === location.state.editCustomerId);
+        if (customerToEdit) {
+          setFormData(customerToEdit);
+          setIsModalOpen(true);
+        }
+      }
     } catch (error) {
       console.error("Erro ao carregar clientes", error);
     }
@@ -41,7 +52,7 @@ export default function Customers() {
 
   useEffect(() => {
     fetchCustomers();
-  }, []);
+  }, [location.state]);
 
   const filteredCustomers = customers.filter((c: Customer) => {
     const matchesSearch = c.name.toLowerCase().includes(searchTerm.toLowerCase()) || c.phone.includes(searchTerm);
@@ -99,6 +110,7 @@ export default function Customers() {
       phone: formData.phone!,
       credit_limit: Number(formData.credit_limit) || 0,
       is_blocked: formData.is_blocked || false,
+      is_loyal: formData.is_loyal || false,
       status: formData.status || 'ativo',
       due_date: Number(formData.due_date) || 0,
       cep: formData.address?.cep,
@@ -163,7 +175,10 @@ export default function Customers() {
                   <h3>{customer.name}</h3>
                   <p>{customer.phone}</p>
                 </div>
-                <div className="status-icon">
+                <div className="status-icon" style={{ display: 'flex', gap: '0.5rem' }}>
+                  {customer.is_loyal && (
+                    <div className="badge success" style={{textTransform: 'uppercase', background: 'rgba(59, 130, 246, 0.2)', color: '#3b82f6', border: '1px solid rgba(59, 130, 246, 0.4)'}}>★ Fiel</div>
+                  )}
                   {customer.status === 'serasa' || (customer.is_blocked && customer.status !== 'espera') ? (
                     <div className="badge danger" style={{textTransform: 'uppercase'}}><UserX size={16} /> Serasa</div>
                   ) : customer.status === 'espera' ? (
@@ -289,6 +304,14 @@ export default function Customers() {
           </div>
 
           <h3 style={{fontSize: '1rem', margin: '1.5rem 0 1rem', color: 'var(--primary)'}}>Limites e Crédito</h3>
+          
+          <div className="form-group" style={{ marginBottom: '1.5rem' }}>
+            <label style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', cursor: 'pointer', color: 'var(--text-main)', fontSize: '0.95rem' }}>
+              <input type="checkbox" checked={formData.is_loyal || false} onChange={e => setFormData({...formData, is_loyal: e.target.checked})} style={{ width: '18px', height: '18px' }} />
+              <strong>Marcar como Cliente Fiel</strong>
+            </label>
+            <p style={{fontSize: '0.8rem', color: 'var(--text-muted)', marginLeft: '1.8rem', marginTop: '0.2rem'}}>Se marcado, o cliente terá acesso aos descontos de fidelidade (se ativo nas configurações) e aparecerá com destaque.</p>
+          </div>
           
           <div className="form-row">
             <div className="form-group">

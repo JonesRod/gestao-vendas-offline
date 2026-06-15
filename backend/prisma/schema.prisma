@@ -17,6 +17,7 @@ model Customer {
   credit_limit Float
   credit_used  Float
   is_blocked   Boolean  @default(false)
+  is_loyal     Boolean  @default(false)
   due_date     Int
   status       String?
   
@@ -81,6 +82,7 @@ model Sale {
   status        String
   date          DateTime
   due_date      DateTime?
+  invoice_number String?
 
   customer      Customer? @relation(fields: [customerId], references: [id])
   items         SaleItem[]
