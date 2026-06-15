@@ -22,6 +22,7 @@ export default function Pos() {
   const [manualInvoiceNumber, setManualInvoiceNumber] = useState<string>('');
   const [alertMessage, setAlertMessage] = useState<string | null>(null);
   const [itemToDelete, setItemToDelete] = useState<number | null>(null);
+  const [downPayment, setDownPayment] = useState<string>('');
 
   const [products, setProducts] = useState<Product[]>([]);
   const [customers, setCustomers] = useState<Customer[]>([]);
@@ -109,6 +110,16 @@ export default function Pos() {
       (c.email && c.email.toLowerCase().includes(term));
   }).slice(0, 5);
 
+  const handleDownPaymentChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    let value = e.target.value.replace(/\D/g, '');
+    if (!value) {
+      setDownPayment('');
+      return;
+    }
+    const floatValue = parseInt(value, 10) / 100;
+    setDownPayment(floatValue.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 }));
+  };
+
   const handleFinalizeSale = async () => {
     if (cart.length === 0) return;
 
@@ -154,8 +165,15 @@ export default function Pos() {
 
         cart.forEach(item => {
           const amount = item.price_credit * item.quantity;
+          
+          const parsedDownPayment = parseFloat(downPayment.replace(/\./g, '').replace(',', '.')) || 0;
+          const safeDownPayment = Math.min(parsedDownPayment, currentTotal);
+          const itemRatio = currentTotal > 0 ? amount / currentTotal : 0;
+          const itemDownPayment = safeDownPayment * itemRatio;
+          const remainingAmount = amount - itemDownPayment;
+
           const installmentsCount = item.selected_installments || 1;
-          const installmentValue = amount / installmentsCount;
+          const installmentValue = remainingAmount / installmentsCount;
 
           for (let i = 1; i <= installmentsCount; i++) {
             const dateObj = new Date(baseYear, baseMonth + (i - 1), baseDay);
@@ -197,6 +215,7 @@ export default function Pos() {
       setSearchTerm('');
       setSaleDate(new Date().toISOString().split('T')[0]);
       setManualInvoiceNumber('');
+      setDownPayment('');
       setShowDueDateModal(false);
       setShowSuccess(true);
       
@@ -505,6 +524,16 @@ export default function Pos() {
                   value={dueDate}
                   onChange={(e) => setDueDate(e.target.value)}
                   required
+                  style={{ width: '100%', padding: '0.8rem', borderRadius: '8px', background: 'transparent', border: '1px solid var(--border-color)', color: 'var(--text-main)', marginTop: '0.5rem' }}
+                />
+              </div>
+              <div className="form-group" style={{ marginTop: '1rem' }}>
+                <label>Valor de Entrada (Opcional - R$)</label>
+                <input
+                  type="text"
+                  placeholder="Ex: 50,00"
+                  value={downPayment}
+                  onChange={handleDownPaymentChange}
                   style={{ width: '100%', padding: '0.8rem', borderRadius: '8px', background: 'transparent', border: '1px solid var(--border-color)', color: 'var(--text-main)', marginTop: '0.5rem' }}
                 />
               </div>

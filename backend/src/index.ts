@@ -136,19 +136,30 @@ app.post('/api/sales', async (req, res) => {
           ...saleData,
           items: {
             create: items || []
-          },
-          installments: {
-            create: installments || []
           }
         }
       });
 
+      if (installments && installments.length > 0) {
+        const installmentsToCreate = installments.map((inst: any) => ({
+          ...inst,
+          saleId: sale.id
+        }));
+        await tx.installment.createMany({
+          data: installmentsToCreate
+        });
+      }
+
       if (saleData.customerId && saleData.paymentMethod === 'credit') {
          const customer = await tx.customer.findUnique({ where: { id: saleData.customerId }});
          if (customer) {
+            const sumInstallments = installments && installments.length > 0 
+               ? installments.reduce((acc: number, inst: any) => acc + inst.amount, 0)
+               : saleData.totalAmount;
+
             await tx.customer.update({
                where: { id: customer.id },
-               data: { credit_used: customer.credit_used + saleData.totalAmount }
+               data: { credit_used: customer.credit_used + sumInstallments }
             });
          }
       }
