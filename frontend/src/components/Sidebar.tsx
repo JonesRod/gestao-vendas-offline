@@ -1,7 +1,8 @@
 import { useState, useEffect } from 'react';
-import { NavLink } from 'react-router-dom';
-import { LayoutDashboard, ShoppingCart, Users, Package, Settings, Store, Briefcase, FileText, Receipt, Palette, Moon, Sun, Menu, X } from 'lucide-react';
+import { NavLink, useNavigate } from 'react-router-dom';
+import { LayoutDashboard, ShoppingCart, Users, Package, Settings, Store, Briefcase, FileText, Receipt, Palette, Moon, Sun, Menu, X, LogOut } from 'lucide-react';
 import Modal from './Modal';
+import { useAuth } from '../contexts/AuthContext';
 import './Sidebar.css';
 
 const navItems = [
@@ -19,6 +20,8 @@ export default function Sidebar() {
   const [isThemeModalOpen, setIsThemeModalOpen] = useState(false);
   const [theme, setTheme] = useState<'dark'|'light'>('dark');
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
+  const { logout } = useAuth();
+  const navigate = useNavigate();
 
   useEffect(() => {
     const savedTheme = localStorage.getItem('theme') as 'dark'|'light' | null;
@@ -41,6 +44,11 @@ export default function Sidebar() {
       document.documentElement.removeAttribute('data-theme');
     }
     setIsThemeModalOpen(false);
+  };
+
+  const handleLogout = () => {
+    logout();
+    navigate('/login');
   };
 
   return (
@@ -85,9 +93,14 @@ export default function Sidebar() {
       </nav>
 
       <div className="sidebar-footer" style={{ borderTop: '1px solid var(--border-color)', paddingTop: '1rem', marginTop: 'auto' }}>
-        <button onClick={() => setIsThemeModalOpen(true)} className="nav-item" style={{ background: 'transparent', border: 'none', cursor: 'pointer', outline: 'none', width: '100%', display: 'flex', alignItems: 'center', gap: '0.8rem', color: 'var(--text-muted)', marginBottom: '1rem', padding: '0.6rem 0.8rem' }}>
+        <button onClick={() => setIsThemeModalOpen(true)} className="nav-item" style={{ background: 'transparent', border: 'none', cursor: 'pointer', outline: 'none', width: '100%', display: 'flex', alignItems: 'center', gap: '0.8rem', color: 'var(--text-muted)', marginBottom: '0.5rem', padding: '0.6rem 0.8rem' }}>
            <Palette size={20} className="nav-icon" />
            <span className="nav-label" style={{ fontWeight: 500 }}>Aparência</span>
+        </button>
+        
+        <button onClick={handleLogout} className="nav-item" style={{ background: 'transparent', border: 'none', cursor: 'pointer', outline: 'none', width: '100%', display: 'flex', alignItems: 'center', gap: '0.8rem', color: 'var(--danger)', marginBottom: '1rem', padding: '0.6rem 0.8rem' }}>
+           <LogOut size={20} className="nav-icon" style={{ color: 'var(--danger)' }} />
+           <span className="nav-label" style={{ fontWeight: 500 }}>Sair</span>
         </button>
 
         <div className="user-profile">

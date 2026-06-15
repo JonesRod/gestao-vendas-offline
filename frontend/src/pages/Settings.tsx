@@ -13,7 +13,6 @@ export default function Settings() {
     email: '', phone: '', tradeName: '', companyName: '', cnpj: '', ownerBirthDate: '',
     address: { cep: '', street: '', number: '', neighborhood: '', city: '', state: '', observation: '' },
     loyalty_active: false, loyalty_days: 30,
-    punctuality_discount_active: false, punctuality_discount_percent: 5,
     penalty_active: false, penalty_percent: 2, interest_percent: 1,
     whatsapp_token: '', whatsapp_instance: '', email_token: '', email_sender: ''
   };
@@ -178,27 +177,6 @@ export default function Settings() {
             </div>
           </div>
 
-          <div className="rule-section">
-            <div className="rule-header">
-              <div className="rule-title">
-                <h4>Desconto de Pontualidade</h4>
-                <label className="toggle-switch">
-                  <input type="checkbox" checked={formData.punctuality_discount_active} onChange={e => setFormData({...formData, punctuality_discount_active: e.target.checked})} />
-                  <span className="slider"></span>
-                </label>
-              </div>
-              <p>Aplicar desconto automaticamente se o cliente pagar o fiado no dia ou antes.</p>
-            </div>
-            <div className={`rule-body ${!formData.punctuality_discount_active ? 'disabled' : ''}`}>
-              <div className="form-group">
-                <label>Porcentagem de Desconto</label>
-                <div style={{display: 'flex', alignItems: 'center', gap: '0.5rem'}}>
-                  <input type="number" min="0" max="100" step="0.1" value={formData.punctuality_discount_percent} onChange={e => setFormData({...formData, punctuality_discount_percent: Number(e.target.value)})} disabled={!formData.punctuality_discount_active} style={{maxWidth: '120px'}} />
-                  <span>%</span>
-                </div>
-              </div>
-            </div>
-          </div>
 
           <div className="rule-section">
             <div className="rule-header">

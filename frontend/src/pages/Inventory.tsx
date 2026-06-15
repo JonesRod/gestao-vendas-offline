@@ -1,5 +1,6 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { Search, Plus, Minus, Package, Edit, Trash2, Image as ImageIcon, X } from 'lucide-react';
+import { api } from '../services/api';
 import { useLiveQuery } from 'dexie-react-hooks';
 import { db, type Product } from '../db/db';
 import Modal from '../components/Modal';
@@ -7,19 +8,34 @@ import { maskCurrency, parseCurrency } from '../utils/masks';
 import './Inventory.css';
 
 export default function Inventory() {
+  const settingsData = useLiveQuery(() => db.settings.get(1));
   const [searchTerm, setSearchTerm] = useState('');
   const [filter, setFilter] = useState<'all' | 'kits' | 'avulsos' | 'low'>('all');
   const [kitAvailableSearch, setKitAvailableSearch] = useState('');
   const [kitSelectedSearch, setKitSelectedSearch] = useState('');
   const [isModalOpen, setIsModalOpen] = useState(false);
+  const [deleteConfirmId, setDeleteConfirmId] = useState<number | null>(null);
   const [modalType, setModalType] = useState<'product' | 'kit'>('product');
   
   const initialFormState: Partial<Product> = {
-    name: '', description: '', cost: 0, margin_cash: 0, margin_credit: 0, price_cash: 0, price_credit: 0, stock: 0, is_active: true, images: [], type: 'product', allow_credit: true, max_installments: 1
+    name: '', description: '', cost: 0, margin_cash: 0, margin_credit: 0, price_cash: 0, price_credit: 0, stock: 0, is_active: true, images: [], type: 'product', allow_credit: true, max_installments: 1, punctuality_discount_active: false, punctuality_discount_percent: 0, punctuality_discount_value: 0, loyalty_discount_active: false, loyalty_discount_percent: 0, loyalty_discount_value: 0
   };
   const [formData, setFormData] = useState<Partial<Product>>(initialFormState);
   
-  const products = useLiveQuery(() => db.products.toArray()) || [];
+  const [products, setProducts] = useState<Product[]>([]);
+
+  const fetchProducts = async () => {
+    try {
+      const { data } = await api.get('/products');
+      setProducts(data);
+    } catch (error) {
+      console.error("Erro ao buscar produtos", error);
+    }
+  };
+
+  useEffect(() => {
+    fetchProducts();
+  }, []);
 
   const openModal = (type: 'product' | 'kit') => {
     setKitAvailableSearch('');
@@ -90,10 +106,25 @@ export default function Inventory() {
     setIsModalOpen(true);
   };
 
-  const handleDelete = async (id: number) => {
-    if (confirm('Tem certeza que deseja excluir este item?')) {
-      await db.products.delete(id);
+  const handleDelete = (id: number) => {
+    setDeleteConfirmId(id);
+  };
+
+  const confirmDelete = async () => {
+    if (deleteConfirmId !== null) {
+      try {
+        await api.delete(`/products/${deleteConfirmId}`);
+        fetchProducts();
+      } catch (error) {
+        console.error("Erro ao excluir produto", error);
+      } finally {
+        setDeleteConfirmId(null);
+      }
     }
+  };
+
+  const cancelDelete = () => {
+    setDeleteConfirmId(null);
   };
 
   const handleImageUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -177,17 +208,27 @@ export default function Inventory() {
       type: modalType,
       kit_items: modalType === 'kit' ? formData.kit_items || [] : [],
       allow_credit: formData.allow_credit !== false,
-      max_installments: Number(formData.max_installments) || 1
+      max_installments: Number(formData.max_installments) || 1,
+      punctuality_discount_active: formData.punctuality_discount_active || false,
+      punctuality_discount_percent: Number(formData.punctuality_discount_percent) || 0,
+      punctuality_discount_value: Number(formData.punctuality_discount_value) || 0,
+      loyalty_discount_active: formData.loyalty_discount_active || false,
+      loyalty_discount_percent: Number(formData.loyalty_discount_percent) || 0,
+      loyalty_discount_value: Number(formData.loyalty_discount_value) || 0
     };
 
-    if (formData.id) {
-      await db.products.update(formData.id, productData);
-    } else {
-      await db.products.add({ ...productData, created_at: new Date() } as Product);
+    try {
+      if (formData.id) {
+        await api.put(`/products/${formData.id}`, productData);
+      } else {
+        await api.post('/products', productData);
+      }
+      setIsModalOpen(false);
+      setFormData(initialFormState);
+      fetchProducts();
+    } catch (error) {
+      console.error("Erro ao salvar produto", error);
     }
-    
-    setIsModalOpen(false);
-    setFormData(initialFormState);
   };
 
   const filteredProducts = products.filter((p: Product) => {
@@ -460,11 +501,57 @@ export default function Inventory() {
               </label>
             </div>
             {formData.allow_credit !== false && (
-              <div style={{ marginTop: '0.8rem', display: 'flex', alignItems: 'center', gap: '1rem', background: 'rgba(255,255,255,0.02)', padding: '0.5rem 1rem', borderRadius: '8px', border: '1px solid rgba(255,255,255,0.05)' }}>
-                <span style={{ fontSize: '0.9rem', color: 'var(--text-muted)' }}>Dividir em até:</span>
-                <input type="number" min="1" max="24" value={formData.max_installments || 1} onChange={e => setFormData({...formData, max_installments: Number(e.target.value)})} style={{ width: '80px', padding: '0.5rem' }} />
-                <span style={{ fontSize: '0.9rem', color: 'var(--text-muted)' }}>vezes (parcelas)</span>
-              </div>
+              <>
+                <div style={{ marginTop: '0.8rem', display: 'flex', alignItems: 'center', gap: '1rem', background: 'rgba(255,255,255,0.02)', padding: '0.5rem 1rem', borderRadius: '8px', border: '1px solid rgba(255,255,255,0.05)' }}>
+                  <span style={{ fontSize: '0.9rem', color: 'var(--text-muted)' }}>Dividir em até:</span>
+                  <input type="number" min="1" max="24" value={formData.max_installments || 1} onChange={e => setFormData({...formData, max_installments: Number(e.target.value)})} style={{ width: '80px', padding: '0.5rem' }} />
+                  <span style={{ fontSize: '0.9rem', color: 'var(--text-muted)' }}>vezes (parcelas)</span>
+                </div>
+                
+                <div style={{ marginTop: '0.8rem', display: 'flex', flexDirection: 'column', gap: '0.8rem', background: 'rgba(255,255,255,0.02)', padding: '1rem', borderRadius: '8px', border: '1px solid rgba(255,255,255,0.05)' }}>
+                  <label style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', cursor: 'pointer', color: 'var(--text-main)', fontSize: '0.95rem' }}>
+                    <input type="checkbox" checked={formData.punctuality_discount_active === true} onChange={(e) => setFormData({...formData, punctuality_discount_active: e.target.checked})} />
+                    Aplicar Desconto de Pontualidade
+                  </label>
+                  {formData.punctuality_discount_active && (
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '1.5rem', flexWrap: 'wrap' }}>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                        <span style={{ fontSize: '0.9rem', color: 'var(--text-muted)' }}>Desconto (%):</span>
+                        <input type="number" min="0" max="100" step="0.1" value={formData.punctuality_discount_percent || 0} onChange={e => setFormData({...formData, punctuality_discount_percent: Number(e.target.value)})} style={{ width: '80px', padding: '0.5rem' }} />
+                        <span style={{ fontSize: '0.9rem', color: 'var(--text-muted)' }}>%</span>
+                      </div>
+                      
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                        <span style={{ fontSize: '0.9rem', color: 'var(--text-muted)' }}>Desconto Fixo (R$):</span>
+                        <input type="text" value={maskCurrency(formData.punctuality_discount_value || 0)} onChange={e => setFormData({...formData, punctuality_discount_value: parseCurrency(e.target.value)})} style={{ width: '100px', padding: '0.5rem' }} />
+                      </div>
+                    </div>
+                  )}
+                </div>
+                
+                {settingsData?.loyalty_active && (
+                  <div style={{ marginTop: '0.8rem', display: 'flex', flexDirection: 'column', gap: '0.8rem', background: 'rgba(255,255,255,0.02)', padding: '1rem', borderRadius: '8px', border: '1px solid rgba(255,255,255,0.05)' }}>
+                    <label style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', cursor: 'pointer', color: 'var(--text-main)', fontSize: '0.95rem' }}>
+                      <input type="checkbox" checked={formData.loyalty_discount_active === true} onChange={(e) => setFormData({...formData, loyalty_discount_active: e.target.checked})} />
+                      Aplicar Desconto de Cliente Fiel
+                    </label>
+                    {formData.loyalty_discount_active && (
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '1.5rem', flexWrap: 'wrap' }}>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                          <span style={{ fontSize: '0.9rem', color: 'var(--text-muted)' }}>Desconto (%):</span>
+                          <input type="number" min="0" max="100" step="0.1" value={formData.loyalty_discount_percent || 0} onChange={e => setFormData({...formData, loyalty_discount_percent: Number(e.target.value)})} style={{ width: '80px', padding: '0.5rem' }} />
+                          <span style={{ fontSize: '0.9rem', color: 'var(--text-muted)' }}>%</span>
+                        </div>
+                        
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                          <span style={{ fontSize: '0.9rem', color: 'var(--text-muted)' }}>Desconto Fixo (R$):</span>
+                          <input type="text" value={maskCurrency(formData.loyalty_discount_value || 0)} onChange={e => setFormData({...formData, loyalty_discount_value: parseCurrency(e.target.value)})} style={{ width: '100px', padding: '0.5rem' }} />
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                )}
+              </>
             )}
           </div>
 
@@ -487,6 +574,16 @@ export default function Inventory() {
             <button type="submit" className="btn-primary">Salvar</button>
           </div>
         </form>
+      </Modal>
+
+      <Modal isOpen={deleteConfirmId !== null} onClose={cancelDelete} title="Confirmar Exclusão">
+        <div style={{ padding: '1rem' }}>
+          <p style={{ marginBottom: '2rem', fontSize: '1.05rem', color: 'var(--text-main)' }}>Tem certeza que deseja excluir este item?</p>
+          <div className="form-actions">
+            <button type="button" className="btn-secondary" onClick={cancelDelete}>Cancelar</button>
+            <button type="button" className="btn-primary" style={{ background: 'var(--danger)' }} onClick={confirmDelete}>Excluir</button>
+          </div>
+        </div>
       </Modal>
     </div>
   );

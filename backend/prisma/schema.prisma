@@ -1,0 +1,176 @@
+datasource db {
+  provider = "sqlite"
+  url      = env("DATABASE_URL")
+}
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+model Customer {
+  id           Int      @id @default(autoincrement())
+  name         String
+  cpf          String?
+  email        String?
+  birth_date   String?
+  phone        String
+  credit_limit Float
+  credit_used  Float
+  is_blocked   Boolean  @default(false)
+  due_date     Int
+  status       String?
+  
+  cep          String?
+  street       String?
+  number       String?
+  neighborhood String?
+  city         String?
+  state        String?
+  observation  String?
+
+  created_at   DateTime @default(now())
+
+  sales        Sale[]
+  installments Installment[]
+  payments     Payment[]
+}
+
+model Product {
+  id               Int      @id @default(autoincrement())
+  name             String
+  description      String?
+  cost             Float?
+  margin_cash      Float?
+  margin_credit    Float?
+  price_cash       Float
+  price_credit     Float
+  stock            Int
+  is_active        Boolean  @default(true)
+  images           String?
+  type                         String
+  allow_credit                 Boolean?
+  max_installments             Int?
+  punctuality_discount_active  Boolean? @default(false)
+  punctuality_discount_percent Float?   @default(0)
+  punctuality_discount_value   Float?   @default(0)
+  loyalty_discount_active      Boolean? @default(false)
+  loyalty_discount_percent     Float?   @default(0)
+  loyalty_discount_value       Float?   @default(0)
+  created_at       DateTime @default(now())
+
+  saleItems        SaleItem[]
+  kitItemsParent   KitItem[]  @relation("ParentProduct")
+  kitItemsChild    KitItem[]  @relation("ChildProduct")
+}
+
+model KitItem {
+  id               Int      @id @default(autoincrement())
+  parentProductId  Int
+  childProductId   Int
+  quantity         Int
+
+  parentProduct    Product  @relation("ParentProduct", fields: [parentProductId], references: [id])
+  childProduct     Product  @relation("ChildProduct", fields: [childProductId], references: [id])
+}
+
+model Sale {
+  id            Int      @id @default(autoincrement())
+  customerId    Int?
+  totalAmount   Float
+  paymentMethod String
+  status        String
+  date          DateTime
+  due_date      DateTime?
+
+  customer      Customer? @relation(fields: [customerId], references: [id])
+  items         SaleItem[]
+}
+
+model SaleItem {
+  id            Int      @id @default(autoincrement())
+  saleId        Int
+  productId     Int
+  quantity      Int
+  price_applied Float
+
+  sale          Sale     @relation(fields: [saleId], references: [id])
+  product       Product  @relation(fields: [productId], references: [id])
+}
+
+model Installment {
+  id           Int      @id @default(autoincrement())
+  saleId       Int
+  customerId   Int
+  amount       Float
+  due_date     DateTime
+  status       String
+  number       Int
+  total        Int
+  productName  String
+
+  customer     Customer @relation(fields: [customerId], references: [id])
+}
+
+model Payment {
+  id           Int      @id @default(autoincrement())
+  customerId   Int
+  amount       Float
+  method       String
+  date         DateTime
+
+  customer     Customer @relation(fields: [customerId], references: [id])
+}
+
+model Employee {
+  id           Int      @id @default(autoincrement())
+  name         String
+  cpf          String?
+  email        String?
+  birth_date   String?
+  role         String
+  phone        String
+  is_active    Boolean  @default(true)
+  
+  cep          String?
+  street       String?
+  number       String?
+  neighborhood String?
+  city         String?
+  state        String?
+  observation  String?
+
+  created_at   DateTime @default(now())
+}
+
+model Settings {
+  id                           Int      @id @default(autoincrement())
+  email                        String
+  phone                        String
+  
+  cep                          String?
+  street                       String?
+  number                       String?
+  neighborhood                 String?
+  city                         String?
+  state                        String?
+  observation                  String?
+
+  tradeName                    String
+  companyName                  String
+  cnpj                         String
+  ownerBirthDate               String
+
+  loyalty_active               Boolean
+  loyalty_days                 Int
+
+  penalty_active               Boolean
+  penalty_percent              Float
+  interest_percent             Float
+
+  whatsapp_token               String?
+  whatsapp_instance            String?
+  email_token                  String?
+  email_sender                 String?
+
+  updated_at                   DateTime?
+}

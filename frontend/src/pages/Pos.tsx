@@ -1,7 +1,7 @@
-import { useLiveQuery } from 'dexie-react-hooks';
 import { AlertCircle, Banknote, CheckCircle, CreditCard, Search, ShoppingCart, Trash2, UserCheck, UserPlus, X } from 'lucide-react';
-import { useState } from 'react';
-import { db, type Customer, type Product, type Sale } from '../db/db';
+import { useState, useEffect } from 'react';
+import { api } from '../services/api';
+import type { Customer, Product, Sale } from '../db/db';
 import './Pos.css';
 
 export default function Pos() {
@@ -19,14 +19,31 @@ export default function Pos() {
   const [showDueDateModal, setShowDueDateModal] = useState(false);
   const [dueDate, setDueDate] = useState('');
 
-  const products = useLiveQuery(() => db.products.toArray()) || [];
-  const customers = useLiveQuery(() => db.customers.toArray()) || [];
+  const [products, setProducts] = useState<Product[]>([]);
+  const [customers, setCustomers] = useState<Customer[]>([]);
+  const [allSales, setAllSales] = useState<Sale[]>([]);
+
+  const loadData = async () => {
+    try {
+      const [prodRes, custRes, salesRes] = await Promise.all([
+        api.get('/products'),
+        api.get('/customers'),
+        api.get('/sales')
+      ]);
+      setProducts(prodRes.data);
+      setCustomers(custRes.data);
+      setAllSales(salesRes.data);
+    } catch (error) {
+      console.error(error);
+    }
+  };
+
+  useEffect(() => { loadData(); }, []);
 
   const handleSelectCustomer = async (customer: Customer) => {
     setSelectedCustomer(customer);
     if (customer.credit_used > 0) {
-      const sales = await db.sales.where('customerId').equals(customer.id!).toArray();
-      const pending = sales.filter(s => s.status === 'pending');
+      const pending = allSales.filter(s => s.customerId === customer.id && s.status === 'pending');
       setPendingSales(pending);
       setPosStep('customer_dashboard');
     } else {
@@ -112,10 +129,8 @@ export default function Pos() {
       }
 
       if (!showDueDateModal) {
-        // Padroniza a data inicial para 30 dias a partir da data atual
         const defaultDate = new Date();
         defaultDate.setDate(defaultDate.getDate() + 30);
-
         setDueDate(defaultDate.toISOString().split('T')[0]);
         setShowDueDateModal(true);
         return;
@@ -123,38 +138,8 @@ export default function Pos() {
     }
 
     try {
-      const saleId = await db.sales.add({
-        customerId: selectedCustomer?.id,
-        totalAmount: currentTotal,
-        paymentMethod: paymentMethod,
-        status: paymentMethod === 'credit' ? 'pending' : 'paid',
-        date: new Date(),
-        due_date: paymentMethod === 'credit' ? new Date(dueDate) : undefined
-      });
-
-      const saleItems = cart.map(item => {
-        const price = paymentMethod === 'cash' ? item.price_cash : item.price_credit;
-        if (item.id) {
-          db.products.update(item.id, {
-            stock: item.stock - item.quantity
-          });
-        }
-        return {
-          saleId: saleId as number,
-          productId: item.id,
-          quantity: item.quantity,
-          price_applied: price
-        };
-      });
-
-      await db.saleItems.bulkAdd(saleItems);
-
+      const allInstallments: any[] = [];
       if (paymentMethod === 'credit' && selectedCustomer?.id) {
-        await db.customers.update(selectedCustomer.id, {
-          credit_used: selectedCustomer.credit_used + currentTotal
-        });
-
-        const allInstallments: any[] = [];
         const [y, m, d] = dueDate.split('-');
         const baseYear = Number(y);
         const baseMonth = Number(m) - 1;
@@ -168,7 +153,6 @@ export default function Pos() {
           for (let i = 1; i <= installmentsCount; i++) {
             const dateObj = new Date(baseYear, baseMonth + (i - 1), baseDay);
             allInstallments.push({
-              saleId: saleId,
               customerId: selectedCustomer.id,
               amount: installmentValue,
               due_date: dateObj,
@@ -179,9 +163,24 @@ export default function Pos() {
             });
           }
         });
-
-        await db.installments.bulkAdd(allInstallments);
       }
+
+      const payload = {
+        customerId: selectedCustomer?.id,
+        totalAmount: currentTotal,
+        paymentMethod: paymentMethod,
+        status: paymentMethod === 'credit' ? 'pending' : 'paid',
+        date: new Date(),
+        due_date: paymentMethod === 'credit' ? new Date(dueDate) : undefined,
+        items: cart.map(item => ({
+          productId: item.id,
+          quantity: item.quantity,
+          price_applied: paymentMethod === 'cash' ? item.price_cash : item.price_credit
+        })),
+        installments: allInstallments
+      };
+
+      await api.post('/sales', payload);
 
       setCart([]);
       setSelectedCustomer(null);
@@ -190,12 +189,14 @@ export default function Pos() {
       setShowDueDateModal(false);
       setPosStep('select_customer');
       setShowSuccess(true);
-
+      
+      loadData();
+      
       setTimeout(() => setShowSuccess(false), 3000);
 
     } catch (error) {
       console.error("Erro ao salvar venda:", error);
-      alert("Houve um erro ao tentar salvar a venda.");
+      alert("Houve um erro ao tentar salvar a venda no banco de dados central.");
     }
   };
 

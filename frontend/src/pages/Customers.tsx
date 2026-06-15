@@ -1,7 +1,7 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { Search, Plus, UserX, UserCheck, Edit, DollarSign, Trash2 } from 'lucide-react';
-import { useLiveQuery } from 'dexie-react-hooks';
-import { db, type Customer } from '../db/db';
+import { api } from '../services/api';
+import type { Customer } from '../db/db';
 import Modal from '../components/Modal';
 import { maskCPF, maskPhone, maskCEP, maskDate, fetchAddressByCep, maskCurrency, parseCurrency } from '../utils/masks';
 import './Customers.css';
@@ -15,8 +15,33 @@ export default function Customers() {
     address: { cep: '', street: '', number: '', neighborhood: '', city: '', state: '', observation: '' }
   };
   const [formData, setFormData] = useState<Partial<Customer>>(initialFormState);
-  
-  const customers = useLiveQuery(() => db.customers.toArray()) || [];
+  const [customers, setCustomers] = useState<Customer[]>([]);
+
+  const fetchCustomers = async () => {
+    try {
+      const { data } = await api.get('/customers');
+      // Mapear propriedades planas do backend para o formato de subobjeto address do form
+      const formatted = data.map((c: any) => ({
+        ...c,
+        address: {
+          cep: c.cep || '',
+          street: c.street || '',
+          number: c.number || '',
+          neighborhood: c.neighborhood || '',
+          city: c.city || '',
+          state: c.state || '',
+          observation: c.observation || ''
+        }
+      }));
+      setCustomers(formatted);
+    } catch (error) {
+      console.error("Erro ao carregar clientes", error);
+    }
+  };
+
+  useEffect(() => {
+    fetchCustomers();
+  }, []);
 
   const filteredCustomers = customers.filter((c: Customer) => {
     const matchesSearch = c.name.toLowerCase().includes(searchTerm.toLowerCase()) || c.phone.includes(searchTerm);
@@ -33,7 +58,12 @@ export default function Customers() {
 
   const handleDelete = async (id: number) => {
     if (confirm('Tem certeza que deseja excluir este cliente?')) {
-      await db.customers.delete(id);
+      try {
+        await api.delete(`/customers/${id}`);
+        fetchCustomers();
+      } catch (error) {
+        console.error("Erro ao excluir", error);
+      }
     }
   };
 
@@ -71,17 +101,27 @@ export default function Customers() {
       is_blocked: formData.is_blocked || false,
       status: formData.status || 'ativo',
       due_date: Number(formData.due_date) || 0,
-      address: formData.address,
+      cep: formData.address?.cep,
+      street: formData.address?.street,
+      number: formData.address?.number,
+      neighborhood: formData.address?.neighborhood,
+      city: formData.address?.city,
+      state: formData.address?.state,
+      observation: formData.address?.observation,
     };
 
-    if (formData.id) {
-      await db.customers.update(formData.id, customerData);
-    } else {
-      await db.customers.add({ ...customerData, credit_used: 0, created_at: new Date() } as Customer);
+    try {
+      if (formData.id) {
+        await api.put(`/customers/${formData.id}`, customerData);
+      } else {
+        await api.post('/customers', { ...customerData, credit_used: 0 });
+      }
+      setIsModalOpen(false);
+      setFormData(initialFormState);
+      fetchCustomers();
+    } catch (error) {
+      console.error("Erro ao salvar cliente", error);
     }
-    
-    setIsModalOpen(false);
-    setFormData(initialFormState);
   };
 
   return (
