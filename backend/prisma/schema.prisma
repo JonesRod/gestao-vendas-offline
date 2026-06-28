@@ -28,6 +28,8 @@ model Customer {
   city         String?
   state        String?
   observation  String?
+  lat          Float?
+  lng          Float?
 
   created_at   DateTime @default(now())
 

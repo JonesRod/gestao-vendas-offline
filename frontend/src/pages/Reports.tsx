@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { BarChart3, TrendingUp, TrendingDown, Download, ChevronLeft, FileText, Package, DollarSign, Calendar, Info, CheckCircle, Printer, Share2 } from 'lucide-react';
+import { BarChart3, TrendingUp, TrendingDown, Download, ChevronLeft, FileText, Package, DollarSign, Calendar, Info, CheckCircle, Printer, Share2, MapPin } from 'lucide-react';
 import { useLiveQuery } from 'dexie-react-hooks';
 import { db, type Installment, type Sale } from '../db/db';
 import { api } from '../services/api';
@@ -8,6 +8,25 @@ import Modal from '../components/Modal';
 import { maskCurrency, parseCurrency } from '../utils/masks';
 import jsPDF from 'jspdf';
 import autoTable from 'jspdf-autotable';
+
+function getDistanceFromLatLonInKm(lat1: number, lon1: number, lat2: number, lon2: number) {
+  var R = 6371;
+  var dLat = deg2rad(lat2-lat1);
+  var dLon = deg2rad(lon2-lon1); 
+  var a = Math.sin(dLat/2) * Math.sin(dLat/2) + Math.cos(deg2rad(lat1)) * Math.cos(deg2rad(lat2)) * Math.sin(dLon/2) * Math.sin(dLon/2); 
+  var c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a)); 
+  return R * c;
+}
+function deg2rad(deg: number) { return deg * (Math.PI/180); }
+
+async function geocodeAddress(addrStr: string) {
+   try {
+     const res = await fetch(`https://nominatim.openstreetmap.org/search?q=${encodeURIComponent(addrStr)}&format=json&limit=1`);
+     const data = await res.json();
+     if (data && data.length > 0) return { lat: parseFloat(data[0].lat), lng: parseFloat(data[0].lon) };
+   } catch(e) {}
+   return null;
+}
 
 export default function Reports() {
   const [reportType, setReportType] = useState<null | 'dashboard' | 'sales' | 'inventory' | 'receivables' | 'received'>(null);
@@ -515,6 +534,8 @@ function ReceivablesReport() {
   const [singleDate, setSingleDate] = useState('');
   const [startDate, setStartDate] = useState('');
   const [endDate, setEndDate] = useState('');
+  const [sortMethod, setSortMethod] = useState<'date' | 'location'>('date');
+  const [isSortingLocation, setIsSortingLocation] = useState(false);
 
   // Estados de Modais
   const [selectedInstallment, setSelectedInstallment] = useState<Installment | null>(null);
@@ -579,7 +600,18 @@ function ReceivablesReport() {
      }
 
      return true;
-  }).sort((a,b) => new Date(a.due_date).getTime() - new Date(b.due_date).getTime());
+  }).sort((a,b) => {
+     if (sortMethod === 'location' && settings?.address?.lat) {
+        const cusA = customers.find(c => c.id === a.customerId);
+        const cusB = customers.find(c => c.id === b.customerId);
+        let distA = 999999;
+        let distB = 999999;
+        if (cusA?.lat) distA = getDistanceFromLatLonInKm(settings.address.lat, settings.address.lng!, cusA.lat, cusA.lng!);
+        if (cusB?.lat) distB = getDistanceFromLatLonInKm(settings.address.lat, settings.address.lng!, cusB.lat, cusB.lng!);
+        return distA - distB;
+     }
+     return new Date(a.due_date).getTime() - new Date(b.due_date).getTime();
+  });
 
   const totalReceivable = filteredInstallments.reduce((sum, inc) => sum + inc.amount, 0);
 
@@ -669,6 +701,53 @@ function ReceivablesReport() {
     }
   };
 
+  const handleSortByLocation = async () => {
+    setIsSortingLocation(true);
+    try {
+      let storeLat = settings?.address?.lat;
+      let storeLng = settings?.address?.lng;
+      
+      if (!storeLat || !storeLng) {
+         if (!settings?.address?.street || !settings?.address?.city) {
+            alert("Endereço da loja incompleto. Configure o endereço (Rua e Cidade) em Configurações.");
+            setIsSortingLocation(false); return;
+         }
+         const addrStr = `${settings.address.street}, ${settings.address.number || ''}, ${settings.address.city}, Brasil`;
+         const coords = await geocodeAddress(addrStr);
+         if (coords) {
+           storeLat = coords.lat; storeLng = coords.lng;
+           await db.settings.update(settings.id!, { address: { ...settings.address, lat: storeLat, lng: storeLng } });
+         }
+      }
+      if (!storeLat) {
+        alert("Não foi possível localizar o endereço da loja via satélite. Tente detalhar mais em Configurações.");
+        setIsSortingLocation(false); return;
+      }
+
+      const updatedCustomers = [...customers];
+      for (let inst of filteredInstallments) {
+         const cus = updatedCustomers.find(c => c.id === inst.customerId);
+         if (cus && (!cus.lat || !cus.lng)) {
+            if (cus.street && cus.city) {
+              const addrStr = `${cus.street}, ${cus.number || ''}, ${cus.city}, Brasil`;
+              const coords = await geocodeAddress(addrStr);
+              if (coords) {
+                 cus.lat = coords.lat; cus.lng = coords.lng;
+                 await api.put(`/customers/${cus.id}`, { lat: coords.lat, lng: coords.lng }).catch(() => {});
+              }
+            }
+            await new Promise(resolve => setTimeout(resolve, 1000)); // Rate limit 1 req/sec for Nominatim
+         }
+      }
+      setCustomers(updatedCustomers);
+      setSortMethod('location');
+    } catch (e) {
+      alert("Erro ao ordenar por localização.");
+    } finally {
+      setIsSortingLocation(false);
+    }
+  };
+
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: '1.5rem' }}>
       <div className="glass-panel" style={{ padding: '1.5rem', borderRadius: '16px' }}>
@@ -734,7 +813,14 @@ function ReceivablesReport() {
         <h3 style={{ margin: 0, fontSize: '1.2rem', display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
            <TrendingDown size={20} className="text-danger" /> Resultados Consolidados
         </h3>
-        <div style={{ fontSize: '1.4rem', fontWeight: 800, color: 'var(--warning)', background: 'rgba(245, 158, 11, 0.1)', padding: '0.5rem 1rem', borderRadius: '8px' }}>{filteredInstallments.length} Títulos P/ Receber: R$ {totalReceivable.toLocaleString('pt-BR', {minimumFractionDigits: 2, maximumFractionDigits: 2})}</div>
+        
+        <div style={{ display: 'flex', gap: '1rem', alignItems: 'center' }}>
+           <button onClick={() => sortMethod === 'date' ? handleSortByLocation() : setSortMethod('date')} disabled={isSortingLocation} className="btn-secondary" style={{ padding: '0.5rem 1rem', display: 'flex', alignItems: 'center', gap: '0.5rem', borderRadius: '8px' }}>
+              <MapPin size={18} />
+              {isSortingLocation ? 'Calculando rotas...' : (sortMethod === 'location' ? 'Restaurar Data' : 'Ordenar p/ Proximidade (GPS)')}
+           </button>
+           <div style={{ fontSize: '1.4rem', fontWeight: 800, color: 'var(--warning)', background: 'rgba(245, 158, 11, 0.1)', padding: '0.5rem 1rem', borderRadius: '8px' }}>{filteredInstallments.length} Títulos P/ Receber: R$ {totalReceivable.toLocaleString('pt-BR', {minimumFractionDigits: 2, maximumFractionDigits: 2})}</div>
+        </div>
       </div>
       
       <div style={{ overflowX: 'auto' }}>

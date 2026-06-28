@@ -9,6 +9,8 @@ export interface Address {
   city: string;
   state: string;
   observation: string;
+  lat?: number;
+  lng?: number;
 }
 
 export interface Customer {
@@ -32,6 +34,8 @@ export interface Customer {
   city?: string;
   state?: string;
   observation?: string;
+  lat?: number;
+  lng?: number;
   created_at: Date;
 }
 
