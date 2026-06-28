@@ -1,6 +1,6 @@
 .sidebar {
   width: 280px;
-  height: calc(100vh - 2rem);
+  height: calc(100dvh - 2rem);
   margin: 1rem;
   display: flex;
   flex-direction: column;
@@ -211,7 +211,7 @@
     top: 0;
     left: -320px;
     width: 280px;
-    height: 100vh;
+    height: 100dvh;
     margin: 0;
     padding: 1.5rem;
     z-index: 1000;
