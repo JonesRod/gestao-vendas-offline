@@ -1,13 +1,16 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
+import { useLocation } from 'react-router-dom';
 import { Search, DollarSign, Wallet, CheckCircle, ChevronLeft, Calendar, FileText, Info, Printer, Share2 } from 'lucide-react';
 import { useLiveQuery } from 'dexie-react-hooks';
 import { db, type Customer, type Installment, type Sale } from '../db/db';
+import { api } from '../services/api';
 import Modal from '../components/Modal';
 import { maskCurrency, parseCurrency } from '../utils/masks';
 import './Receipts.css';
 
 export default function Receipts() {
   const [searchTerm, setSearchTerm] = useState('');
+  const location = useLocation();
   const [step, setStep] = useState<'search' | 'account'>('search');
   const [selectedCustomer, setSelectedCustomer] = useState<Customer | null>(null);
   const [customerInstallments, setCustomerInstallments] = useState<Installment[]>([]);
@@ -28,11 +31,37 @@ export default function Receipts() {
   
   const settings = useLiveQuery(() => db.settings.toCollection().first());
 
-  const customers = useLiveQuery(() => db.customers.toArray()) || [];
+  const [customers, setCustomers] = useState<Customer[]>([]);
+  const [pendingInstallments, setPendingInstallments] = useState<Installment[]>([]);
+
+  const loadInitialData = async () => {
+    try {
+      const [custRes, instRes] = await Promise.all([
+        api.get('/customers'),
+        api.get('/installments?status=pending')
+      ]);
+      setCustomers(custRes.data);
+      setPendingInstallments(instRes.data);
+    } catch (err) {
+      console.error(err);
+    }
+  };
+
+  useEffect(() => {
+    loadInitialData();
+  }, []);
+
+  useEffect(() => {
+    if (location.state?.customerId && customers.length > 0) {
+      const c = customers.find(x => x.id === location.state.customerId);
+      if (c && (!selectedCustomer || selectedCustomer.id !== c.id)) {
+        handleSelectCustomer(c);
+      }
+    }
+  }, [location.state, customers]);
+
   const debtors = customers.filter(c => c.credit_used > 0);
   
-  const pendingInstallments = useLiveQuery(() => db.installments.where('status').equals('pending').toArray()) || [];
-
   const attentionCustomerIds = new Set(
     pendingInstallments.filter(inst => {
       const today = new Date();
@@ -46,7 +75,7 @@ export default function Receipts() {
   const attentionDebtors = debtors.filter(c => c.id && attentionCustomerIds.has(c.id));
 
   // Não mostrar clientes de início (só se pesquisar)
-  const filteredDebtors = searchTerm.trim().length >= 2 ? debtors.filter((c: Customer) => 
+  const filteredCustomers = searchTerm.trim().length >= 2 ? customers.filter((c: Customer) => 
     c.name.toLowerCase().includes(searchTerm.toLowerCase()) || 
     c.phone.includes(searchTerm)
   ) : [];
@@ -60,16 +89,25 @@ export default function Receipts() {
   };
 
   const loadCustomerInstallments = async (customerId: number) => {
-    const installs = await db.installments.where({ customerId, status: 'pending' }).toArray();
-    // Sort by due date (closest first)
-    installs.sort((a, b) => new Date(a.due_date).getTime() - new Date(b.due_date).getTime());
-    setCustomerInstallments(installs);
+    try {
+      const res = await api.get(`/installments?customerId=${customerId}&status=pending`);
+      const installs = res.data;
+      installs.sort((a: any, b: any) => new Date(a.due_date).getTime() - new Date(b.due_date).getTime());
+      setCustomerInstallments(installs);
+    } catch (err) {
+      console.error(err);
+    }
   };
 
   const openDetails = async (installment: Installment) => {
     setSelectedInstallment(installment);
-    const sale = await db.sales.get(installment.saleId);
-    setInstallmentSale(sale || null);
+    try {
+      const res = await api.get('/sales');
+      const sale = res.data.find((s: any) => s.id === installment.saleId);
+      setInstallmentSale(sale || null);
+    } catch (e) {
+      console.error(e);
+    }
     setIsDetailsModalOpen(true);
   };
 
@@ -81,7 +119,7 @@ export default function Receipts() {
        const todayNum = new Date().setHours(0,0,0,0);
        const dueNum = new Date(installment.due_date).setHours(0,0,0,0);
        if (todayNum <= dueNum) {
-          calcAutoDiscount = installment.amount * (settings.punctuality_discount_percent / 100);
+          calcAutoDiscount = installment.amount * ((settings.punctuality_discount_percent || 0) / 100);
        }
     }
     setAutoDiscount(calcAutoDiscount);
@@ -118,14 +156,14 @@ export default function Receipts() {
     try {
       if (!isPartial) {
         // 1. Marca parcela como paga integralmente
-        await db.installments.update(selectedInstallment.id, { 
+        await api.put(`/installments/${selectedInstallment.id}`, { 
           status: 'paid' 
         });
       } else {
         // 1. Recebimento parcial: diminui o valor da parcela abatendo o desconto junto e empurra a validade
         const [y, m, d] = nextDueDate.split('-');
         const dateObj = new Date(Number(y), Number(m) - 1, Number(d));
-        await db.installments.update(selectedInstallment.id, {
+        await api.put(`/installments/${selectedInstallment.id}`, {
           amount: finalExpected - paymentAmount,
           due_date: dateObj
         });
@@ -133,7 +171,7 @@ export default function Receipts() {
 
       // 2. Registra o dinheiro físico que entrou
       if (paymentAmount > 0) {
-        await db.payments.add({
+        await api.post('/payments', {
           customerId: selectedCustomer.id,
           amount: paymentAmount,
           method: paymentMethod,
@@ -143,15 +181,20 @@ export default function Receipts() {
 
       // 3. Abate do crédito utilizado (Dívida total = Dinheiro que pagou + Desconto que demos)
       const newCreditUsed = selectedCustomer.credit_used - (paymentAmount + discountAmount);
-      await db.customers.update(selectedCustomer.id, {
+      await api.put(`/customers/${selectedCustomer.id}`, {
         credit_used: Math.max(0, newCreditUsed) 
       });
 
       setIsPaymentModalOpen(false);
       setShowSuccess(true);
       
-      const updatedCustomer = await db.customers.get(selectedCustomer.id);
+      await loadInitialData(); // reload customers and pending installments
+      
+      // Update selected customer
+      const updatedCustRes = await api.get('/customers');
+      const updatedCustomer = updatedCustRes.data.find((c: any) => c.id === selectedCustomer.id);
       if (updatedCustomer) setSelectedCustomer(updatedCustomer);
+      
       await loadCustomerInstallments(selectedCustomer.id);
 
       setTimeout(() => setShowSuccess(false), 3000);
@@ -195,10 +238,10 @@ export default function Receipts() {
 
               <div style={{ display: 'grid', gap: '1rem' }}>
                 {searchTerm.trim().length >= 2 ? (
-                   filteredDebtors.length === 0 ? (
-                    <p style={{color: 'var(--text-muted)'}}>Nenhum devedor encontrado com essa busca.</p>
+                   filteredCustomers.length === 0 ? (
+                    <p style={{color: 'var(--text-muted)'}}>Nenhum cliente encontrado com essa busca.</p>
                    ) : (
-                    filteredDebtors.map(customer => (
+                    filteredCustomers.map(customer => (
                       <div key={customer.id} className="debtor-row glass-panel" onClick={() => handleSelectCustomer(customer)}>
                         <div>
                           <h3 style={{ fontSize: '1.2rem', marginBottom: '0.2rem' }}>{customer.name}</h3>
@@ -265,7 +308,14 @@ export default function Receipts() {
             </button>
             <div>
               <h2 style={{ fontSize: '1.8rem', margin: 0 }}>{selectedCustomer.name}</h2>
-              <p style={{ color: 'var(--text-muted)' }}>Conta e Parcelas em Aberto</p>
+              <div style={{ color: 'var(--text-muted)', fontSize: '0.9rem', marginTop: '0.2rem' }}>
+                <p style={{ margin: 0 }}><strong>Contato:</strong> {selectedCustomer.phone}</p>
+                <p style={{ margin: 0 }}>
+                  <strong>Endereço:</strong> {selectedCustomer.street || (selectedCustomer.address && selectedCustomer.address.street) ? 
+                    `${selectedCustomer.street || selectedCustomer.address?.street}, ${selectedCustomer.number || selectedCustomer.address?.number} - ${selectedCustomer.neighborhood || selectedCustomer.address?.neighborhood} | ${selectedCustomer.city || selectedCustomer.address?.city}` 
+                    : 'Endereço não cadastrado'}
+                </p>
+              </div>
             </div>
             <div className="account-header-total">
                <span style={{ fontSize: '0.85rem', color: 'var(--text-muted)', display: 'block' }}>Saldo Devedor Total</span>
@@ -299,20 +349,23 @@ export default function Receipts() {
                   <div key={inst.id} className="installment-card glass-panel" style={{ borderLeft: isDelayed ? '4px solid var(--danger)' : '4px solid var(--primary)' }}>
                     
                     <div className="installment-info">
-                      <div style={{ background: 'rgba(255,255,255,0.05)', padding: '1rem', borderRadius: '8px', textAlign: 'center', minWidth: '80px' }}>
-                        <span style={{ fontSize: '0.8rem', color: 'var(--text-muted)', display: 'block' }}>Parcela</span>
-                        <span style={{ fontSize: '1.4rem', fontWeight: 'bold' }}>{inst.number}/{inst.total}</span>
-                      </div>
-                      
                       <div>
                         <h4 style={{ fontSize: '1.1rem', margin: '0 0 0.25rem 0' }}>{inst.productName}</h4>
-                        <div style={{ display: 'flex', gap: '1rem', color: 'var(--text-muted)', fontSize: '0.9rem' }}>
+                        <div style={{ display: 'flex', flexDirection: 'column', gap: '0.2rem', color: 'var(--text-muted)', fontSize: '0.9rem' }}>
+                          <span style={{ display: 'flex', alignItems: 'center', gap: '0.3rem' }}>
+                            <strong>Cód. Compra:</strong> #{inst.saleId} | <strong>Data:</strong> {inst.sale ? new Date(inst.sale.date).toLocaleDateString() : 'N/A'}
+                          </span>
                           <span style={{ display: 'flex', alignItems: 'center', gap: '0.3rem', color: isDelayed ? 'var(--danger)' : 'inherit' }}>
                             <Calendar size={14} /> 
                             Vence: {new Date(inst.due_date).toLocaleDateString()}
                             {isDelayed && <strong style={{ marginLeft: '0.5rem' }}>({calculateDelay(inst.due_date)} dias atraso)</strong>}
                           </span>
                         </div>
+                      </div>
+
+                      <div style={{ background: 'rgba(255,255,255,0.05)', padding: '1rem', borderRadius: '8px', textAlign: 'center', minWidth: '80px' }}>
+                        <span style={{ fontSize: '0.8rem', color: 'var(--text-muted)', display: 'block' }}>Parcela</span>
+                        <span style={{ fontSize: '1.4rem', fontWeight: 'bold' }}>{inst.number}/{inst.total}</span>
                       </div>
                     </div>
 
@@ -391,7 +444,7 @@ export default function Receipts() {
                 <span style={{ color: 'var(--text-muted)' }}>Desconto Autom. (Pontualidade):</span>
                 <span style={{ color: 'var(--success)' }}>
                   {settings?.punctuality_discount_active && new Date().setHours(0,0,0,0) <= new Date(selectedInstallment.due_date).setHours(0,0,0,0) 
-                    ? `- R$ ${(selectedInstallment.amount * (settings.punctuality_discount_percent / 100)).toLocaleString('pt-BR', {minimumFractionDigits: 2, maximumFractionDigits: 2})}` 
+                    ? `- R$ ${(selectedInstallment.amount * ((settings.punctuality_discount_percent || 0) / 100)).toLocaleString('pt-BR', {minimumFractionDigits: 2, maximumFractionDigits: 2})}` 
                     : 'R$ 0,00'}
                 </span>
               </div>
@@ -400,7 +453,7 @@ export default function Receipts() {
                 <span>Total a Receber Agora:</span>
                 <span>R$ {
                   settings?.punctuality_discount_active && new Date().setHours(0,0,0,0) <= new Date(selectedInstallment.due_date).setHours(0,0,0,0)
-                  ? (selectedInstallment.amount - (selectedInstallment.amount * (settings.punctuality_discount_percent / 100))).toLocaleString('pt-BR', {minimumFractionDigits: 2, maximumFractionDigits: 2})
+                  ? (selectedInstallment.amount - (selectedInstallment.amount * ((settings.punctuality_discount_percent || 0) / 100))).toLocaleString('pt-BR', {minimumFractionDigits: 2, maximumFractionDigits: 2})
                   : selectedInstallment.amount.toLocaleString('pt-BR', {minimumFractionDigits: 2, maximumFractionDigits: 2})
                 }</span>
               </div>

@@ -58,6 +58,23 @@ body {
   box-shadow: 0 4px 20px rgba(0, 0, 0, 0.08);
 }
 
+.btn-primary {
+  padding: 0.75rem 1.5rem;
+  border-radius: 8px;
+  border: none;
+  background: var(--primary);
+  color: white;
+  cursor: pointer;
+  font-weight: 500;
+  font-family: inherit;
+  transition: all 0.2s;
+}
+
+.btn-primary:hover {
+  background: var(--primary-hover);
+  box-shadow: 0 4px 12px rgba(99, 102, 241, 0.3);
+}
+
 /* Common Layout */
 .app-container {
   display: flex;
@@ -170,5 +187,92 @@ body {
   .responsive-table .btn-group > button {
     justify-content: center;
     padding: 0.8rem !important;
+  }
+}
+
+/* =========================================
+   ESTILOS PARA IMPRESSÃO (CTRL + P)
+   ========================================= */
+@media print {
+  /* Esconder elementos de interface */
+  aside, nav, .sidebar, button, .btn-primary, .btn-secondary, .btn-icon, 
+  .search-box, .filter-pills, .form-actions {
+    display: none !important;
+  }
+
+  /* Resetar layout principal para ocupar a página toda */
+  .app-container {
+    display: block !important;
+    height: auto !important;
+    overflow: visible !important;
+    background: white !important;
+  }
+  
+  .main-content {
+    margin: 0 !important;
+    padding: 0 !important;
+    background: white !important;
+    overflow: visible !important;
+  }
+
+  /* Forçar cores claras para economizar tinta e manter legibilidade */
+  body, * {
+    color: black !important;
+    background: transparent !important;
+    box-shadow: none !important;
+  }
+
+  /* Paineis e Cartões (Glass panels) viram bordas simples */
+  .glass-panel, .customer-card, .receipt-card {
+    page-break-inside: avoid; /* Evitar corte no meio do cartão */
+    border: 1px solid #ccc !important;
+    border-radius: 8px !important;
+    margin-bottom: 1rem !important;
+    padding: 1rem !important;
+    background: white !important;
+  }
+
+  /* Forçar layout lado a lado nos cartões (ignora media queries de celular) */
+  .installment-card {
+    display: flex !important;
+    flex-direction: row !important;
+    justify-content: space-between !important;
+    align-items: center !important;
+  }
+  .installment-info {
+    display: flex !important;
+    flex-direction: row !important;
+    gap: 1rem !important;
+    align-items: center !important;
+  }
+  .installment-actions {
+    display: flex !important;
+    flex-direction: row !important;
+    align-items: center !important;
+  }
+
+  /* Badges e Status */
+  .badge, .pill, span[style*="background"] {
+    border: 1px solid #666 !important;
+    color: #000 !important;
+    background: transparent !important;
+    padding: 0.2rem 0.5rem !important;
+  }
+  
+  /* Ajuste de tipografia para impressão */
+  h1, h2, h3 {
+    page-break-after: avoid;
+    margin-top: 1rem;
+  }
+  
+  /* Tabelas na impressão */
+  table {
+    width: 100% !important;
+    border-collapse: collapse !important;
+  }
+  
+  th, td {
+    border: 1px solid #ccc !important;
+    padding: 0.5rem !important;
   }
 }

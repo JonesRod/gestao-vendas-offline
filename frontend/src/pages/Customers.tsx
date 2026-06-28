@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { useLocation } from 'react-router-dom';
-import { Search, Plus, UserX, UserCheck, Edit, DollarSign, Trash2 } from 'lucide-react';
+import { Search, Plus, UserX, UserCheck, Edit, DollarSign, Trash2, History } from 'lucide-react';
 import { api } from '../services/api';
 import type { Customer } from '../db/db';
 import Modal from '../components/Modal';
@@ -18,6 +18,11 @@ export default function Customers() {
   const [formData, setFormData] = useState<Partial<Customer>>(initialFormState);
   const [customers, setCustomers] = useState<Customer[]>([]);
   const location = useLocation();
+
+  const [isHistoryModalOpen, setIsHistoryModalOpen] = useState(false);
+  const [selectedHistoryCustomer, setSelectedHistoryCustomer] = useState<Customer | null>(null);
+  const [customerSales, setCustomerSales] = useState<any[]>([]);
+  const [customerPayments, setCustomerPayments] = useState<any[]>([]);
 
   const fetchCustomers = async () => {
     try {
@@ -65,6 +70,23 @@ export default function Customers() {
   const openEditModal = (customer: Customer) => {
     setFormData(customer);
     setIsModalOpen(true);
+  };
+
+  const openHistoryModal = async (customer: Customer) => {
+    setSelectedHistoryCustomer(customer);
+    setIsHistoryModalOpen(true);
+    try {
+      const [salesRes, paymentsRes] = await Promise.all([
+        api.get('/sales'),
+        api.get('/payments')
+      ]);
+      const s = salesRes.data.filter((sale: any) => sale.customerId === customer.id).sort((a: any, b: any) => new Date(b.date).getTime() - new Date(a.date).getTime());
+      const p = paymentsRes.data.filter((pay: any) => pay.customerId === customer.id).sort((a: any, b: any) => new Date(b.date).getTime() - new Date(a.date).getTime());
+      setCustomerSales(s);
+      setCustomerPayments(p);
+    } catch (e) {
+      console.error("Erro ao carregar histórico", e);
+    }
   };
 
   const handleDelete = async (id: number) => {
@@ -216,6 +238,9 @@ export default function Customers() {
 
               <div className="card-actions">
                 <div style={{display: 'flex', gap: '1rem'}}>
+                  <button className="btn-icon" title="Histórico" onClick={() => openHistoryModal(customer)}>
+                    <History size={18} /> Histórico
+                  </button>
                   <button className="btn-icon" title="Editar Cliente" onClick={() => openEditModal(customer)}>
                     <Edit size={18} /> Editar
                   </button>
@@ -306,11 +331,23 @@ export default function Customers() {
           <h3 style={{fontSize: '1rem', margin: '1.5rem 0 1rem', color: 'var(--primary)'}}>Limites e Crédito</h3>
           
           <div className="form-group" style={{ marginBottom: '1.5rem' }}>
-            <label style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', cursor: 'pointer', color: 'var(--text-main)', fontSize: '0.95rem' }}>
-              <input type="checkbox" checked={formData.is_loyal || false} onChange={e => setFormData({...formData, is_loyal: e.target.checked})} style={{ width: '18px', height: '18px' }} />
-              <strong>Marcar como Cliente Fiel</strong>
+            <label style={{ display: 'block', color: 'var(--text-muted)', fontSize: '0.875rem', marginBottom: '0.5rem' }}>
+              Status de Fidelidade
             </label>
-            <p style={{fontSize: '0.8rem', color: 'var(--text-muted)', marginLeft: '1.8rem', marginTop: '0.2rem'}}>Se marcado, o cliente terá acesso aos descontos de fidelidade (se ativo nas configurações) e aparecerá com destaque.</p>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '1rem' }}>
+              {formData.is_loyal ? (
+                <div className="badge success" style={{ textTransform: 'uppercase', background: 'rgba(59, 130, 246, 0.2)', color: '#3b82f6', border: '1px solid rgba(59, 130, 246, 0.4)', padding: '6px 12px', fontSize: '0.85rem' }}>
+                  ★ Cliente Fiel
+                </div>
+              ) : (
+                <div className="badge" style={{ background: 'rgba(255,255,255,0.05)', color: 'var(--text-muted)', border: '1px solid var(--border-color)', padding: '6px 12px', fontSize: '0.85rem' }}>
+                  Cliente Normal
+                </div>
+              )}
+              <span style={{ fontSize: '0.8rem', color: 'var(--text-muted)' }}>
+                (Definido automaticamente pelas configurações)
+              </span>
+            </div>
           </div>
           
           <div className="form-row">
@@ -356,6 +393,71 @@ export default function Customers() {
           </div>
         </form>
       </Modal>
+
+      <Modal isOpen={isHistoryModalOpen} onClose={() => setIsHistoryModalOpen(false)} title={`Histórico: ${selectedHistoryCustomer?.name}`}>
+        <div style={{ display: 'flex', flexDirection: 'column', gap: '2rem' }}>
+          <div>
+            <h3 style={{ fontSize: '1.2rem', marginBottom: '1rem', color: 'var(--primary)', borderBottom: '1px solid var(--border-color)', paddingBottom: '0.5rem' }}>Compras</h3>
+            {customerSales.length === 0 ? (
+              <p style={{ color: 'var(--text-muted)' }}>Nenhuma compra registrada.</p>
+            ) : (
+              <table className="responsive-table" style={{ width: '100%', borderCollapse: 'collapse', textAlign: 'left' }}>
+                <thead>
+                  <tr style={{ borderBottom: '1px solid var(--border-color)' }}>
+                    <th style={{ padding: '0.8rem', color: 'var(--text-muted)' }}>Data</th>
+                    <th style={{ padding: '0.8rem', color: 'var(--text-muted)' }}>Método</th>
+                    <th style={{ padding: '0.8rem', color: 'var(--text-muted)' }}>Status</th>
+                    <th style={{ padding: '0.8rem', color: 'var(--text-muted)', textAlign: 'right' }}>Valor Total</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {customerSales.map(sale => (
+                    <tr key={sale.id} style={{ borderBottom: '1px solid rgba(255,255,255,0.05)' }}>
+                      <td style={{ padding: '0.8rem' }}>{new Date(sale.date).toLocaleString()}</td>
+                      <td style={{ padding: '0.8rem', textTransform: 'capitalize' }}>{sale.paymentMethod === 'cash' ? 'Vista/Din/Pix' : 'Fiado/Cartão'}</td>
+                      <td style={{ padding: '0.8rem' }}>
+                        {sale.status === 'paid' ? (
+                          <span style={{ color: 'var(--success)' }}>Pago</span>
+                        ) : (
+                          <span style={{ color: 'var(--warning)' }}>Pendente</span>
+                        )}
+                      </td>
+                      <td style={{ padding: '0.8rem', textAlign: 'right', fontWeight: 'bold' }}>R$ {sale.totalAmount.toLocaleString('pt-BR', {minimumFractionDigits: 2, maximumFractionDigits: 2})}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            )}
+          </div>
+
+          <div>
+            <h3 style={{ fontSize: '1.2rem', marginBottom: '1rem', color: 'var(--success)', borderBottom: '1px solid var(--border-color)', paddingBottom: '0.5rem' }}>Pagamentos (Baixas)</h3>
+            {customerPayments.length === 0 ? (
+              <p style={{ color: 'var(--text-muted)' }}>Nenhum pagamento registrado.</p>
+            ) : (
+              <table className="responsive-table" style={{ width: '100%', borderCollapse: 'collapse', textAlign: 'left' }}>
+                <thead>
+                  <tr style={{ borderBottom: '1px solid var(--border-color)' }}>
+                    <th style={{ padding: '0.8rem', color: 'var(--text-muted)' }}>Data</th>
+                    <th style={{ padding: '0.8rem', color: 'var(--text-muted)' }}>Método</th>
+                    <th style={{ padding: '0.8rem', color: 'var(--text-muted)', textAlign: 'right' }}>Valor Baixado</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {customerPayments.map(pay => (
+                    <tr key={pay.id} style={{ borderBottom: '1px solid rgba(255,255,255,0.05)' }}>
+                      <td style={{ padding: '0.8rem' }}>{new Date(pay.date).toLocaleString()}</td>
+                      <td style={{ padding: '0.8rem', textTransform: 'capitalize' }}>{pay.method === 'cash' ? 'Dinheiro' : pay.method === 'pix' ? 'PIX' : 'Cartão'}</td>
+                      <td style={{ padding: '0.8rem', textAlign: 'right', fontWeight: 'bold', color: 'var(--success)' }}>R$ {pay.amount.toLocaleString('pt-BR', {minimumFractionDigits: 2, maximumFractionDigits: 2})}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            )}
+          </div>
+        </div>
+      </Modal>
+
     </div>
   );
 }

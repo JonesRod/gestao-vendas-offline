@@ -86,6 +86,7 @@ model Sale {
 
   customer      Customer? @relation(fields: [customerId], references: [id])
   items         SaleItem[]
+  installments  Installment[]
 }
 
 model SaleItem {
@@ -111,6 +112,7 @@ model Installment {
   productName  String
 
   customer     Customer @relation(fields: [customerId], references: [id])
+  sale         Sale     @relation(fields: [saleId], references: [id])
 }
 
 model Payment {

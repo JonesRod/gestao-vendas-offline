@@ -1,8 +1,8 @@
-import { AlertCircle, Banknote, CheckCircle, CreditCard, Search, ShoppingCart, Trash2, UserCheck, UserPlus, X, FileText, Printer, MapPin } from 'lucide-react';
+import { Search, Trash2, CheckCircle, X, Banknote, CreditCard, MapPin, ShoppingCart, AlertCircle } from 'lucide-react';
 import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { api } from '../services/api';
-import type { Customer, Product, Sale } from '../db/db';
+import type { Customer, Product } from '../db/db';
 import './Pos.css';
 
 export default function Pos() {
@@ -23,22 +23,19 @@ export default function Pos() {
   const [alertMessage, setAlertMessage] = useState<string | null>(null);
   const [itemToDelete, setItemToDelete] = useState<number | null>(null);
   const [downPayment, setDownPayment] = useState<string>('');
+  const [customers, setCustomers] = useState<Customer[]>([]);
+  const [pendingInstallments, setPendingInstallments] = useState<any[]>([]);
 
   const [products, setProducts] = useState<Product[]>([]);
-  const [customers, setCustomers] = useState<Customer[]>([]);
-  const [allSales, setAllSales] = useState<Sale[]>([]);
-  const [pendingSales, setPendingSales] = useState<Sale[]>([]);
 
   const loadData = async () => {
     try {
-      const [prodRes, custRes, salesRes] = await Promise.all([
+      const [prodRes, custRes] = await Promise.all([
         api.get('/products'),
-        api.get('/customers'),
-        api.get('/sales')
+        api.get('/customers')
       ]);
       setProducts(prodRes.data);
       setCustomers(custRes.data);
-      setAllSales(salesRes.data);
     } catch (error) {
       console.error(error);
     }
@@ -48,12 +45,17 @@ export default function Pos() {
 
   useEffect(() => {
     if (selectedCustomer) {
-      const pending = allSales.filter(s => s.customerId === selectedCustomer.id && s.status === 'pending');
-      setPendingSales(pending);
+      api.get(`/installments?customerId=${selectedCustomer.id}&status=pending`)
+        .then(res => {
+           const installs = res.data;
+           installs.sort((a: any, b: any) => new Date(a.due_date).getTime() - new Date(b.due_date).getTime());
+           setPendingInstallments(installs);
+        })
+        .catch(console.error);
     } else {
-      setPendingSales([]);
+      setPendingInstallments([]);
     }
-  }, [selectedCustomer, allSales]);
+  }, [selectedCustomer]);
 
   const handleSelectCustomer = async (customer: Customer) => {
     setSelectedCustomer(customer);
@@ -316,31 +318,35 @@ export default function Pos() {
       <div className="pos-middle-section">
         <div className="history-panel glass-panel">
           <div className="panel-header">
-            <h3>3. Histórico de Compras a Prazo</h3>
-            {selectedCustomer && pendingSales.length > 0 && (
-              <span className="badge-warning">{pendingSales.length} em aberto</span>
+            <h3>3. Títulos em Aberto</h3>
+            {selectedCustomer && pendingInstallments.length > 0 && (
+              <span className="badge-warning">{pendingInstallments.length} a pagar</span>
             )}
           </div>
           <div className="history-list">
             {!selectedCustomer ? (
-              <div className="empty-state">Selecione um cliente para ver o histórico.</div>
-            ) : pendingSales.length === 0 ? (
-              <div className="empty-state">Nenhuma compra a prazo em aberto.</div>
+              <div className="empty-state">Selecione um cliente para ver os títulos.</div>
+            ) : pendingInstallments.length === 0 ? (
+              <div className="empty-state">Nenhum título em aberto.</div>
             ) : (
               <table className="history-table">
                 <thead>
                   <tr>
-                    <th>Data</th>
+                    <th>Cód. Compra</th>
+                    <th>Vencimento</th>
                     <th>Valor</th>
-                    <th>Status</th>
+                    <th>Ação</th>
                   </tr>
                 </thead>
                 <tbody>
-                  {pendingSales.map(sale => (
-                    <tr key={sale.id}>
-                      <td>{new Date(sale.date).toLocaleDateString()}</td>
-                      <td className="text-warning font-bold">R$ {sale.totalAmount.toLocaleString('pt-BR', {minimumFractionDigits: 2, maximumFractionDigits: 2})}</td>
-                      <td>Aguardando</td>
+                  {pendingInstallments.map(inst => (
+                    <tr key={inst.id}>
+                      <td style={{ color: 'var(--text-muted)' }}>#{inst.saleId}</td>
+                      <td>{new Date(inst.due_date).toLocaleDateString('pt-BR')}</td>
+                      <td className="text-warning font-bold">R$ {inst.amount.toLocaleString('pt-BR', {minimumFractionDigits: 2, maximumFractionDigits: 2})}</td>
+                      <td>
+                        <button className="btn-primary" style={{ padding: '0.4rem 0.8rem', fontSize: '0.8rem', background: 'var(--success)' }} onClick={() => navigate('/receipts', { state: { customerId: selectedCustomer.id } })}>Pagar</button>
+                      </td>
                     </tr>
                   ))}
                 </tbody>

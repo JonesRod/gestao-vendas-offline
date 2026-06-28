@@ -87,6 +87,7 @@ export interface Installment {
   number: number;
   total: number;
   productName: string; // Para o cliente e lojista saberem do que é essa parcela (ou 'Vários' se agrupar)
+  sale?: any;
 }
 
 export interface Payment {
@@ -136,6 +137,8 @@ export interface Settings {
   whatsapp_instance?: string;
   email_token?: string;
   email_sender?: string;
+  punctuality_discount_active?: boolean;
+  punctuality_discount_percent?: number;
   updated_at?: Date;
 }
 

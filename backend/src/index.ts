@@ -185,6 +185,40 @@ app.post('/api/sales', async (req, res) => {
   }
 });
 
+// Routes for Installments
+app.get('/api/installments', async (req, res) => {
+  const { customerId, status } = req.query;
+  const where: any = {};
+  if (customerId) where.customerId = Number(customerId);
+  if (status) where.status = status;
+  
+  const installments = await prisma.installment.findMany({ 
+    where,
+    include: { sale: true }
+  });
+  res.json(installments);
+});
+
+app.put('/api/installments/:id', async (req, res) => {
+  const { id } = req.params;
+  const installment = await prisma.installment.update({
+    where: { id: Number(id) },
+    data: req.body
+  });
+  res.json(installment);
+});
+
+// Routes for Payments
+app.get('/api/payments', async (req, res) => {
+  const payments = await prisma.payment.findMany();
+  res.json(payments);
+});
+
+app.post('/api/payments', async (req, res) => {
+  const payment = await prisma.payment.create({ data: req.body });
+  res.json(payment);
+});
+
 // Routes for Employees
 app.get('/api/employees', async (req, res) => {
   const employees = await prisma.employee.findMany();

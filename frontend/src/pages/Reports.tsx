@@ -2,6 +2,8 @@ import { useState } from 'react';
 import { BarChart3, TrendingUp, TrendingDown, Download, ChevronLeft, FileText, Package, DollarSign, Calendar, Info, CheckCircle, Printer, Share2 } from 'lucide-react';
 import { useLiveQuery } from 'dexie-react-hooks';
 import { db, type Installment, type Sale } from '../db/db';
+import { api } from '../services/api';
+import { useEffect } from 'react';
 import Modal from '../components/Modal';
 import { maskCurrency, parseCurrency } from '../utils/masks';
 import jsPDF from 'jspdf';
@@ -41,25 +43,30 @@ export default function Reports() {
         return;
       }
 
-      const installments = await db.installments.where('id').anyOf(instIds).toArray();
-      const saleIds = [...new Set(installments.map(i => i.saleId))];
-      const customerIds = [...new Set(installments.map(i => i.customerId))];
+      const [instRes, salesRes, cusRes] = await Promise.all([
+        api.get('/installments'),
+        api.get('/sales'),
+        api.get('/customers')
+      ]);
+      const installments = instRes.data.filter((i: any) => instIds.includes(i.id));
+      const salesArr = salesRes.data;
+      const cusArr = cusRes.data;
 
-      const salesArr = await db.sales.where('id').anyOf(saleIds).toArray();
-      const cusArr = await db.customers.where('id').anyOf(customerIds).toArray();
-      const saleItemsArr = await db.saleItems.where('saleId').anyOf(saleIds).toArray();
-
-      const formatAddress = (addr: any) => addr ? `${addr.street||''}, ${addr.number||''} - ${addr.neighborhood||''} | ${addr.city||''}/${addr.state||''}` : 'S/ Endereço';
+      const formatAddress = (cus: any) => {
+        const addr = cus?.address || cus;
+        if (!addr || (!addr.street && !addr.city && !addr.neighborhood)) return 'S/ Endereço';
+        return `${addr.street||''}, ${addr.number||''} - ${addr.neighborhood||''} | ${addr.city||''}/${addr.state||''}`;
+      };
 
       let sumOriginal = 0;
       let sumJurosMulta = 0;
       let sumTotal = 0;
 
-      const bodyData = installments.map(inst => {
-        const sale = salesArr.find(s => s.id === inst.saleId);
-        const cus = cusArr.find(c => c.id === inst.customerId);
-        const items = saleItemsArr.filter(si => si.saleId === inst.saleId);
-        const qty = items.reduce((sum, item) => sum + item.quantity, 0);
+      const bodyData = installments.map((inst: any) => {
+        const sale = salesArr.find((s: any) => s.id === inst.saleId);
+        const cus = cusArr.find((c: any) => c.id === inst.customerId);
+        const items = sale?.items || [];
+        const qty = items.reduce((sum: any, item: any) => sum + item.quantity, 0);
         
         let juros = 0, multa = 0;
         const now = new Date();
@@ -83,7 +90,7 @@ export default function Reports() {
         
         return [
           `Venda: #${sale?.id||''}\nDa: ${saleDateStr}`,
-          `${cus?.name||''}\nWP: ${cus?.phone||''}\nEnd: ${formatAddress(cus?.address)}\nObs: ${cus?.address?.observation||''}`,
+          `${cus?.name||''}\nWP: ${cus?.phone||''}\nEnd: ${formatAddress(cus)}\nObs: ${cus?.observation || cus?.address?.observation || ''}`,
           `${inst.productName}\nQtd Itens: ${qty}`,
           `V ${dueDateStr}`,
           `Pr: R$ ${inst.amount.toFixed(2).replace('.',',')}\nJ/M: R$ ${(multa+juros).toFixed(2).replace('.',',')}\nTot: R$ ${totalInst.toFixed(2).replace('.',',')}`
@@ -250,8 +257,15 @@ export default function Reports() {
 function DashboardReport() {
   const [period, setPeriod] = useState<'today' | 'week' | 'month'>('month');
 
-  const sales = useLiveQuery(() => db.sales.toArray()) || [];
-  const payments = useLiveQuery(() => db.payments.toArray()) || [];
+  const [sales, setSales] = useState<any[]>([]);
+  const [payments, setPayments] = useState<any[]>([]);
+
+  useEffect(() => {
+    Promise.all([api.get('/sales'), api.get('/payments')]).then(([s, p]) => {
+      setSales(s.data);
+      setPayments(p.data);
+    }).catch(console.error);
+  }, []);
 
   const now = new Date();
   const filterDate = (date: Date) => {
@@ -312,12 +326,43 @@ function DashboardReport() {
           <span style={{ fontSize: '0.85rem', color: 'var(--text-muted)' }}>Vendas marcadas a Prazo (Não contabiliza recebimentos do mês)</span>
         </div>
       </div>
+
+      <table id="report-table" style={{ display: 'none' }}>
+        <thead>
+          <tr>
+            <th>Métrica (Resumo Financeiro)</th>
+            <th>Valor Apurado</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td>Total de Vendas (Geral)</td>
+            <td>R$ {totalSales.toLocaleString('pt-BR', {minimumFractionDigits: 2, maximumFractionDigits: 2})}</td>
+          </tr>
+          <tr>
+            <td>Entrou em Caixa (Dinheiro/Pix/Cartão)</td>
+            <td>R$ {(salesCash + totalPaymentsReceived).toLocaleString('pt-BR', {minimumFractionDigits: 2, maximumFractionDigits: 2})}</td>
+          </tr>
+          <tr>
+            <td>Foi pro Fiado (Lançado a Prazo)</td>
+            <td>R$ {salesCredit.toLocaleString('pt-BR', {minimumFractionDigits: 2, maximumFractionDigits: 2})}</td>
+          </tr>
+        </tbody>
+      </table>
     </div>
   );
 }
 
 function SalesReport() {
-  const sales = useLiveQuery(() => db.sales.orderBy('date').reverse().toArray()) || [];
+  const [sales, setSales] = useState<any[]>([]);
+  useEffect(() => {
+    api.get('/sales').then(res => {
+      const sorted = [...res.data].sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
+      setSales(sorted);
+    }).catch(console.error);
+  }, []);
+
+  const totalSalesValue = sales.reduce((sum, s) => sum + s.totalAmount, 0);
   
   return (
     <div className="glass-panel" style={{ padding: '2rem', borderRadius: '16px' }}>
@@ -363,6 +408,14 @@ function SalesReport() {
                 <td data-label="Valor Total" style={{ padding: '1rem', textAlign: 'right', fontWeight: 600 }}>R$ {sale.totalAmount.toLocaleString('pt-BR', {minimumFractionDigits: 2, maximumFractionDigits: 2})}</td>
               </tr>
             ))}
+            {sales.length > 0 && (
+              <tr style={{ background: 'rgba(255,255,255,0.02)' }}>
+                <td colSpan={4} style={{ padding: '1rem', textAlign: 'right', fontWeight: 'bold' }}>TOTAL GERAL:</td>
+                <td style={{ padding: '1rem', textAlign: 'right', fontWeight: 'bold', color: 'var(--success)' }}>
+                  R$ {totalSalesValue.toLocaleString('pt-BR', {minimumFractionDigits: 2, maximumFractionDigits: 2})}
+                </td>
+              </tr>
+            )}
           </tbody>
         </table>
       </div>
@@ -371,7 +424,10 @@ function SalesReport() {
 }
 
 function InventoryReport() {
-  const products = useLiveQuery(() => db.products.toArray()) || [];
+  const [products, setProducts] = useState<any[]>([]);
+  useEffect(() => {
+    api.get('/products').then(res => setProducts(res.data)).catch(console.error);
+  }, []);
   
   const totalStockItems = products.reduce((sum, p) => sum + (p.stock > 0 ? p.stock : 0), 0);
   const totalStockCost = products.reduce((sum, p) => sum + ((p.cost || 0) * (p.stock > 0 ? p.stock : 0)), 0);
@@ -419,6 +475,36 @@ function InventoryReport() {
           )}
         </div>
       </div>
+
+      <table id="report-table" style={{ display: 'none' }}>
+        <thead>
+          <tr>
+            <th>Cód. / Código de Barras</th>
+            <th>Produto</th>
+            <th>Estoque Atual</th>
+            <th>Valor de Venda</th>
+            <th>Custo Unitário</th>
+          </tr>
+        </thead>
+        <tbody>
+          {products.map(prod => (
+            <tr key={prod.id}>
+              <td>{prod.barcode || 'S/N'}</td>
+              <td>{prod.name}</td>
+              <td>{prod.stock} un</td>
+              <td>R$ {prod.price_cash.toLocaleString('pt-BR', {minimumFractionDigits: 2})}</td>
+              <td>R$ {(prod.cost || 0).toLocaleString('pt-BR', {minimumFractionDigits: 2})}</td>
+            </tr>
+          ))}
+          <tr>
+            <td>RESUMO GERAL</td>
+            <td>-</td>
+            <td>Total Itens: {totalStockItems} un</td>
+            <td>Total Venda: R$ {totalStockSale.toLocaleString('pt-BR', {minimumFractionDigits: 2})}</td>
+            <td>Total Custo: R$ {totalStockCost.toLocaleString('pt-BR', {minimumFractionDigits: 2})}</td>
+          </tr>
+        </tbody>
+      </table>
     </div>
   );
 }
@@ -443,8 +529,24 @@ function ReceivablesReport() {
   const [showSuccess, setShowSuccess] = useState(false);
 
   const settings = useLiveQuery(() => db.settings.toCollection().first());
-  const installments = useLiveQuery(() => db.installments.where('status').equals('pending').toArray()) || [];
-  const customers = useLiveQuery(() => db.customers.toArray()) || [];
+  
+  const [installments, setInstallments] = useState<Installment[]>([]);
+  const [customers, setCustomers] = useState<any[]>([]);
+  
+  const loadData = async () => {
+    try {
+      const [inst, cust] = await Promise.all([
+        api.get('/installments?status=pending'),
+        api.get('/customers')
+      ]);
+      setInstallments(inst.data);
+      setCustomers(cust.data);
+    } catch (e) { console.error(e); }
+  };
+
+  useEffect(() => {
+    loadData();
+  }, []);
   
   const customerMap = new Map(customers.map(c => [c.id, c.name]));
   
@@ -490,8 +592,11 @@ function ReceivablesReport() {
 
   const openDetails = async (installment: Installment) => {
     setSelectedInstallment(installment);
-    const sale = await db.sales.get(installment.saleId);
-    setInstallmentSale(sale || null);
+    try {
+      const res = await api.get('/sales');
+      const sale = res.data.find((s: any) => s.id === installment.saleId);
+      setInstallmentSale(sale || null);
+    } catch (e) { console.error(e); }
     setIsDetailsModalOpen(true);
   };
 
@@ -503,7 +608,7 @@ function ReceivablesReport() {
        const todayNum = new Date().setHours(0,0,0,0);
        const dueNum = new Date(installment.due_date).setHours(0,0,0,0);
        if (todayNum <= dueNum) {
-          calcAutoDiscount = installment.amount * (settings.punctuality_discount_percent / 100);
+          calcAutoDiscount = installment.amount * ((settings.punctuality_discount_percent || 0) / 100);
        }
     }
     setAutoDiscount(calcAutoDiscount);
@@ -530,18 +635,18 @@ function ReceivablesReport() {
 
     try {
       if (!isPartial) {
-        await db.installments.update(selectedInstallment.id, { status: 'paid' });
+        await api.put(`/installments/${selectedInstallment.id}`, { status: 'paid' });
       } else {
         const [y, m, d] = nextDueDate.split('-');
         const dateObj = new Date(Number(y), Number(m) - 1, Number(d));
-        await db.installments.update(selectedInstallment.id, {
+        await api.put(`/installments/${selectedInstallment.id}`, {
           amount: finalExpected - paymentAmount,
           due_date: dateObj
         });
       }
 
       if (paymentAmount > 0) {
-        await db.payments.add({
+        await api.post('/payments', {
           customerId: customer.id,
           amount: paymentAmount,
           method: paymentMethod,
@@ -550,12 +655,13 @@ function ReceivablesReport() {
       }
 
       const newCreditUsed = customer.credit_used - (paymentAmount + discountAmount);
-      await db.customers.update(customer.id, {
+      await api.put(`/customers/${customer.id}`, {
         credit_used: Math.max(0, newCreditUsed)
       });
 
       setIsPaymentModalOpen(false);
       setShowSuccess(true);
+      await loadData();
       setTimeout(() => setShowSuccess(false), 3000);
     } catch (err) {
       console.error(err);
@@ -635,6 +741,7 @@ function ReceivablesReport() {
         <table id="report-table" className="responsive-table" style={{ width: '100%', borderCollapse: 'collapse', textAlign: 'left' }}>
           <thead>
             <tr style={{ borderBottom: '1px solid var(--border-color)' }}>
+              <th style={{ padding: '1rem', color: 'var(--text-muted)', fontWeight: 600 }}>Cód. Compra</th>
               <th style={{ padding: '1rem', color: 'var(--text-muted)', fontWeight: 600 }}>Cliente / Devedor</th>
               <th style={{ padding: '1rem', color: 'var(--text-muted)', fontWeight: 600 }}>Mercadoria - Parcela</th>
               <th style={{ padding: '1rem', color: 'var(--text-muted)', fontWeight: 600 }}>Vencimento</th>
@@ -648,6 +755,7 @@ function ReceivablesReport() {
             )}
             {filteredInstallments.map(inst => (
               <tr key={inst.id} data-id={inst.id} style={{ borderBottom: '1px solid rgba(255,255,255,0.05)' }}>
+                <td data-label="Cód. Compra" style={{ padding: '1rem', color: 'var(--text-muted)' }}>#{inst.saleId}</td>
                 <td data-label="Cliente" style={{ padding: '1rem', fontWeight: 600 }}>{customerMap.get(inst.customerId) || 'Cliente Excluído'}</td>
                 <td data-label="Parcela" style={{ padding: '1rem', color: 'var(--text-muted)' }}>{inst.productName} ({inst.number}/{inst.total})</td>
                 <td data-label="Vencimento" style={{ padding: '1rem', display: 'flex', alignItems: 'center', gap: '0.5rem', color: new Date(inst.due_date) < new Date(new Date().setHours(0,0,0,0)) ? 'var(--danger)' : 'var(--text-muted)' }}>
@@ -718,7 +826,7 @@ function ReceivablesReport() {
                 <span style={{ color: 'var(--text-muted)' }}>Desconto Autom. (Pontualidade):</span>
                 <span style={{ color: 'var(--success)' }}>
                   {settings?.punctuality_discount_active && new Date().setHours(0,0,0,0) <= new Date(selectedInstallment.due_date).setHours(0,0,0,0) 
-                    ? `- R$ ${(selectedInstallment.amount * (settings.punctuality_discount_percent / 100)).toLocaleString('pt-BR', {minimumFractionDigits: 2, maximumFractionDigits: 2})}` 
+                    ? `- R$ ${(selectedInstallment.amount * ((settings.punctuality_discount_percent || 0) / 100)).toLocaleString('pt-BR', {minimumFractionDigits: 2, maximumFractionDigits: 2})}` 
                     : 'R$ 0,00'}
                 </span>
               </div>
@@ -727,7 +835,7 @@ function ReceivablesReport() {
                 <span>Total a Receber Lote:</span>
                 <span>R$ {
                   settings?.punctuality_discount_active && new Date().setHours(0,0,0,0) <= new Date(selectedInstallment.due_date).setHours(0,0,0,0)
-                  ? (selectedInstallment.amount - (selectedInstallment.amount * (settings.punctuality_discount_percent / 100))).toLocaleString('pt-BR', {minimumFractionDigits: 2, maximumFractionDigits: 2})
+                  ? (selectedInstallment.amount - (selectedInstallment.amount * ((settings.punctuality_discount_percent || 0) / 100))).toLocaleString('pt-BR', {minimumFractionDigits: 2, maximumFractionDigits: 2})
                   : selectedInstallment.amount.toLocaleString('pt-BR', {minimumFractionDigits: 2, maximumFractionDigits: 2})
                 }</span>
               </div>
@@ -835,8 +943,16 @@ function ReceivablesReport() {
 }
 
 function ReceivedReport() {
-  const payments = useLiveQuery(() => db.payments.orderBy('date').reverse().toArray()) || [];
-  const customers = useLiveQuery(() => db.customers.toArray()) || [];
+  const [payments, setPayments] = useState<any[]>([]);
+  const [customers, setCustomers] = useState<any[]>([]);
+  
+  useEffect(() => {
+    Promise.all([api.get('/payments'), api.get('/customers')]).then(([p, c]) => {
+      const sorted = [...p.data].sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
+      setPayments(sorted);
+      setCustomers(c.data);
+    }).catch(console.error);
+  }, []);
   
   const customerMap = new Map(customers.map(c => [c.id, c.name]));
   const totalReceived = payments.reduce((sum, p) => sum + p.amount, 0);
@@ -878,6 +994,14 @@ function ReceivedReport() {
                 <td data-label="Baixado (R$)" style={{ padding: '1rem', textAlign: 'right', fontWeight: 700, color: 'var(--success)', fontSize: '1.1rem' }}>R$ {pay.amount.toLocaleString('pt-BR', {minimumFractionDigits: 2, maximumFractionDigits: 2})}</td>
               </tr>
             ))}
+            {payments.length > 0 && (
+              <tr style={{ background: 'rgba(255,255,255,0.02)' }}>
+                <td colSpan={3} style={{ padding: '1rem', textAlign: 'right', fontWeight: 'bold' }}>TOTAL GERAL:</td>
+                <td style={{ padding: '1rem', textAlign: 'right', fontWeight: 'bold', color: 'var(--success)' }}>
+                  R$ {totalReceived.toLocaleString('pt-BR', {minimumFractionDigits: 2, maximumFractionDigits: 2})}
+                </td>
+              </tr>
+            )}
           </tbody>
         </table>
       </div>
