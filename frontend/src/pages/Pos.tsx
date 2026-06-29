@@ -112,7 +112,7 @@ Obrigado pela preferência!`;
     }
   };
 
-  const handleCheckout = () => {
+  const handleClearCustomer = () => {
     setSelectedCustomer(null);
   };
 
