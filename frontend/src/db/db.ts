@@ -143,6 +143,10 @@ export interface Settings {
   email_sender?: string;
   punctuality_discount_active?: boolean;
   punctuality_discount_percent?: number;
+  online_payment_active?: boolean;
+  payment_gateway?: string;
+  payment_api_key?: string;
+  payment_webhook_secret?: string;
   updated_at?: Date;
 }
 
