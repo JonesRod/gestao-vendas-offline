@@ -14,7 +14,8 @@ export default function Settings() {
     address: { cep: '', street: '', number: '', neighborhood: '', city: '', state: '', observation: '' },
     loyalty_active: false, loyalty_days: 30,
     penalty_active: false, penalty_percent: 2, interest_percent: 1,
-    whatsapp_token: '', whatsapp_instance: '', email_token: '', email_sender: ''
+    whatsapp_token: '', whatsapp_instance: '', email_token: '', email_sender: '',
+    online_payment_active: false, payment_gateway: '', payment_api_key: '', payment_webhook_secret: ''
   };
 
   const [formData, setFormData] = useState<Partial<SettingsType>>(initialFormState);
@@ -238,6 +239,60 @@ export default function Settings() {
                 <label>Remetente Base (Sender Address)</label>
                 <input type="email" placeholder="notifica@minhaloja.com" value={formData.email_sender || ''} onChange={e => setFormData({...formData, email_sender: e.target.value})} />
              </div>
+          </div>
+        </div>
+
+        {/* BLOCO 4: Integração de Pagamentos Online */}
+        <div className="settings-card glass-panel">
+          <div className="rule-header" style={{ marginBottom: '1.5rem', borderBottom: '1px solid var(--border-color)', paddingBottom: '1rem' }}>
+            <div className="rule-title">
+              <h2>Pagamentos Online (Gateway)</h2>
+              <label className="toggle-switch">
+                <input type="checkbox" checked={formData.online_payment_active || false} onChange={e => setFormData({...formData, online_payment_active: e.target.checked})} />
+                <span className="slider"></span>
+              </label>
+            </div>
+            <p className="card-subtitle" style={{ marginTop: '0.5rem' }}>Configure o gateway para receber pagamentos via link, pix e boleto de forma automática.</p>
+          </div>
+          
+          <div className={`rule-body ${!formData.online_payment_active ? 'disabled' : ''}`}>
+            <div className="form-group">
+              <label>Gateway de Pagamento</label>
+              <select 
+                value={formData.payment_gateway || ''} 
+                onChange={e => setFormData({...formData, payment_gateway: e.target.value})}
+                disabled={!formData.online_payment_active}
+                style={{ width: '100%', padding: '0.8rem', borderRadius: '8px', background: 'rgba(0,0,0,0.2)', border: '1px solid var(--border-color)', color: 'var(--text-main)', outline: 'none' }}
+              >
+                <option value="" style={{ background: 'var(--bg-panel)' }}>Selecione um gateway...</option>
+                <option value="mercadopago" style={{ background: 'var(--bg-panel)' }}>Mercado Pago</option>
+                <option value="asaas" style={{ background: 'var(--bg-panel)' }}>Asaas</option>
+                <option value="stripe" style={{ background: 'var(--bg-panel)' }}>Stripe</option>
+                <option value="pagseguro" style={{ background: 'var(--bg-panel)' }}>PagSeguro</option>
+              </select>
+            </div>
+            <div className="form-row" style={{ marginTop: '1rem' }}>
+              <div className="form-group">
+                <label>Token de Acesso (API Key / Access Token)</label>
+                <input 
+                  type="password" 
+                  placeholder="Cole a chave de API de produção" 
+                  value={formData.payment_api_key || ''} 
+                  onChange={e => setFormData({...formData, payment_api_key: e.target.value})}
+                  disabled={!formData.online_payment_active}
+                />
+              </div>
+              <div className="form-group">
+                <label>Segredo do Webhook (Webhook Secret)</label>
+                <input 
+                  type="password" 
+                  placeholder="Chave secreta para validação de retornos" 
+                  value={formData.payment_webhook_secret || ''} 
+                  onChange={e => setFormData({...formData, payment_webhook_secret: e.target.value})}
+                  disabled={!formData.online_payment_active}
+                />
+              </div>
+            </div>
           </div>
         </div>
 

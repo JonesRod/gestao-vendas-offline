@@ -172,16 +172,16 @@ export default function Employees() {
             <div className="form-group">
               <label>Cargo</label>
               <select value={formData.role} onChange={e => setFormData({...formData, role: e.target.value})}>
-                <option value="Vendedor">Vendedor</option>
-                <option value="Gerente">Gerente</option>
-                <option value="Entregador">Entregador</option>
+                <option value="Vendedor" style={{ background: 'var(--bg-panel)' }}>Vendedor</option>
+                <option value="Gerente" style={{ background: 'var(--bg-panel)' }}>Gerente</option>
+                <option value="Entregador" style={{ background: 'var(--bg-panel)' }}>Entregador</option>
               </select>
             </div>
             <div className="form-group">
               <label>Status</label>
               <select value={formData.is_active ? 'active' : 'inactive'} onChange={e => setFormData({...formData, is_active: e.target.value === 'active'})}>
-                <option value="active">Ativo</option>
-                <option value="inactive">Inativo</option>
+                <option value="active" style={{ background: 'var(--bg-panel)' }}>Ativo</option>
+                <option value="inactive" style={{ background: 'var(--bg-panel)' }}>Inativo</option>
               </select>
             </div>
           </div>
