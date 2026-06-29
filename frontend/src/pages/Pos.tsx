@@ -3,6 +3,7 @@ import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { api } from '../services/api';
 import type { Customer, Product } from '../db/db';
+import Modal from '../components/Modal';
 import './Pos.css';
 
 export default function Pos() {
@@ -20,6 +21,7 @@ export default function Pos() {
   const [dueDate, setDueDate] = useState('');
   const [saleDate, setSaleDate] = useState<string>(new Date().toISOString().split('T')[0]);
   const [manualInvoiceNumber, setManualInvoiceNumber] = useState<string>('');
+  const [showConfirmModal, setShowConfirmModal] = useState(false);
   const [alertMessage, setAlertMessage] = useState<string | null>(null);
   const [itemToDelete, setItemToDelete] = useState<number | null>(null);
   const [downPayment, setDownPayment] = useState<string>('');
@@ -75,6 +77,7 @@ export default function Pos() {
     } else {
       setCart([...cart, { ...product, quantity: 1, selected_installments: 1 }]);
     }
+    setSearchTerm('');
   };
 
   const removeFromCart = (id: number) => {
@@ -156,7 +159,12 @@ export default function Pos() {
         return;
       }
     }
+    
+    // Show confirmation modal instead of executing immediately
+    setShowConfirmModal(true);
+  };
 
+  const executeFinalizeSale = async () => {
     try {
       const allInstallments: any[] = [];
       if (paymentMethod === 'credit' && selectedCustomer?.id) {
@@ -219,6 +227,7 @@ export default function Pos() {
       setManualInvoiceNumber('');
       setDownPayment('');
       setShowDueDateModal(false);
+      setShowConfirmModal(false);
       setShowSuccess(true);
       
       loadData();
@@ -611,29 +620,6 @@ export default function Pos() {
           </div>
         </div>
       )}
-
-      {/* MODAL DE ALERTA CENTRALIZADO */}
-      {alertMessage && (
-        <div className="modal-overlay" style={{ zIndex: 9999 }} onClick={() => setAlertMessage(null)}>
-          <div className="modal-content glass-panel" style={{ maxWidth: '400px', textAlign: 'center' }} onClick={e => e.stopPropagation()}>
-            <div className="modal-header" style={{ borderBottom: 'none', justifyContent: 'center', paddingBottom: '0' }}>
-              <AlertCircle size={48} color="var(--danger)" style={{ marginBottom: '1rem' }} />
-            </div>
-            <div className="modal-body" style={{ padding: '0 1.5rem 2rem' }}>
-              <h2 style={{ fontSize: '1.2rem', marginBottom: '1rem', color: 'var(--text-main)' }}>Atenção</h2>
-              <p style={{ color: 'var(--text-muted)', marginBottom: '1.5rem' }}>{alertMessage}</p>
-              <button 
-                className="btn-primary" 
-                style={{ width: '100%', padding: '0.8rem', borderRadius: '8px', background: 'var(--primary)', color: 'white', border: 'none', cursor: 'pointer' }}
-                onClick={() => setAlertMessage(null)}
-              >
-                Entendi
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
-
       {/* MODAL DE EXCLUSÃO DE ITEM */}
       {itemToDelete !== null && (
         <div className="modal-overlay" style={{ zIndex: 9999 }} onClick={() => setItemToDelete(null)}>
@@ -667,6 +653,39 @@ export default function Pos() {
           </div>
         </div>
       )}
+
+      {/* MODAL MENSAGENS */}
+      <Modal isOpen={alertMessage !== null} onClose={() => setAlertMessage(null)} title="Aviso">
+        <div style={{ textAlign: 'center', padding: '1rem 0' }}>
+           <AlertCircle size={48} className="text-warning" style={{ margin: '0 auto 1rem auto' }} />
+           <p style={{ fontSize: '1.1rem', marginBottom: '1.5rem', color: 'var(--text-main)' }}>{alertMessage}</p>
+           <button type="button" className="btn-primary" onClick={() => setAlertMessage(null)} style={{ width: '100%' }}>Entendi</button>
+        </div>
+      </Modal>
+
+      {/* MODAL DE CONFIRMAÇÃO DE VENDA */}
+      <Modal isOpen={showConfirmModal} onClose={() => setShowConfirmModal(false)} title="Confirmar Venda">
+        <div style={{ display: 'flex', flexDirection: 'column', gap: '1.5rem', padding: '0.5rem 0' }}>
+          <p style={{ fontSize: '1.1rem', color: 'var(--text-main)' }}>Tem certeza que deseja finalizar esta venda?</p>
+          
+          <div style={{ background: 'rgba(255,255,255,0.05)', padding: '1rem', borderRadius: '8px', border: '1px solid var(--border-color)' }}>
+            <p style={{ margin: '0 0 0.5rem 0' }}><strong style={{ color: 'var(--text-muted)' }}>Total:</strong> R$ {currentTotal.toLocaleString('pt-BR', {minimumFractionDigits: 2})}</p>
+            <p style={{ margin: '0 0 0.5rem 0' }}><strong style={{ color: 'var(--text-muted)' }}>Método:</strong> {paymentMethod === 'cash' ? 'Dinheiro/Pix' : 'Prazo/Cartão'}</p>
+            {selectedCustomer && (
+              <p style={{ margin: 0 }}><strong style={{ color: 'var(--text-muted)' }}>Cliente:</strong> {selectedCustomer.name}</p>
+            )}
+          </div>
+          
+          <div style={{ display: 'flex', gap: '1rem' }}>
+            <button type="button" className="btn-secondary" style={{ flex: 1 }} onClick={() => setShowConfirmModal(false)}>
+              Cancelar
+            </button>
+            <button type="button" className="btn-primary" style={{ flex: 1 }} onClick={executeFinalizeSale}>
+              Sim, Finalizar
+            </button>
+          </div>
+        </div>
+      </Modal>
 
     </div>
   );

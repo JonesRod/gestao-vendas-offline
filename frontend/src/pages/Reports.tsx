@@ -546,7 +546,8 @@ function ReceivablesReport() {
   const [discountAmount, setDiscountAmount] = useState<number>(0);
   const [autoDiscount, setAutoDiscount] = useState<number>(0);
   const [nextDueDate, setNextDueDate] = useState('');
-  const [paymentMethod, setPaymentMethod] = useState<'cash' | 'pix' | 'card'>('cash');
+  const [showConfirmPayment, setShowConfirmPayment] = useState(false);
+  const [paymentMethod, setPaymentMethod] = useState<'cash'|'pix'|'card'>('cash');
   const [showSuccess, setShowSuccess] = useState(false);
 
   const settings = useLiveQuery(() => db.settings.toCollection().first());
@@ -665,6 +666,17 @@ function ReceivablesReport() {
     const isPartial = paymentAmount < finalExpected;
     if (isPartial && !nextDueDate) return alert('Informe data para o resto parcial.');
 
+    setShowConfirmPayment(true);
+  };
+
+  const executePayment = async () => {
+    if (!selectedInstallment || !selectedInstallment.id) return;
+    const customer = customers.find(c => c.id === selectedInstallment.customerId);
+    if (!customer || !customer.id) return;
+    
+    const finalExpected = selectedInstallment.amount - discountAmount;
+    const isPartial = paymentAmount < finalExpected;
+
     try {
       if (!isPartial) {
         await api.put(`/installments/${selectedInstallment.id}`, { status: 'paid' });
@@ -692,6 +704,7 @@ function ReceivablesReport() {
       });
 
       setIsPaymentModalOpen(false);
+      setShowConfirmPayment(false);
       setShowSuccess(true);
       await loadData();
       setTimeout(() => setShowSuccess(false), 3000);
@@ -1017,10 +1030,26 @@ function ReceivablesReport() {
         </form>
       </Modal>
 
+      <Modal isOpen={showConfirmPayment} onClose={() => setShowConfirmPayment(false)} title="Confirmar Recebimento">
+        <div style={{ display: 'flex', flexDirection: 'column', gap: '1.5rem', padding: '0.5rem 0' }}>
+          <p style={{ fontSize: '1.1rem', color: 'var(--text-main)' }}>Confirmar a baixa desta parcela?</p>
+          <div style={{ background: 'rgba(255,255,255,0.05)', padding: '1rem', borderRadius: '8px', border: '1px solid var(--border-color)' }}>
+            <p style={{ margin: '0 0 0.5rem 0' }}><strong style={{ color: 'var(--text-muted)' }}>Valor a Receber:</strong> R$ {paymentAmount.toLocaleString('pt-BR', {minimumFractionDigits: 2})}</p>
+            <p style={{ margin: '0 0 0.5rem 0' }}><strong style={{ color: 'var(--text-muted)' }}>Método:</strong> {paymentMethod === 'cash' ? 'Dinheiro' : paymentMethod === 'pix' ? 'PIX' : 'Cartão'}</p>
+          </div>
+          <div style={{ display: 'flex', gap: '1rem' }}>
+            <button type="button" className="btn-secondary" style={{ flex: 1 }} onClick={() => setShowConfirmPayment(false)}>Cancelar</button>
+            <button type="button" className="btn-primary" style={{ flex: 1, background: 'var(--success)' }} onClick={executePayment}>Sim, Receber</button>
+          </div>
+        </div>
+      </Modal>
+
       {showSuccess && (
-        <div style={{ position: 'fixed', bottom: '2rem', right: '2rem', background: 'var(--success)', color: 'white', padding: '1rem 1.5rem', borderRadius: '12px', display: 'flex', alignItems: 'center', gap: '1rem', fontWeight: 600, boxShadow: '0 10px 30px rgba(16, 185, 129, 0.3)', zIndex: 2000, animation: 'fadeIn 0.3s ease-out' }}>
-          <CheckCircle size={24} />
-          <span>Fatura baixada com sucesso pelo Relatório!</span>
+        <div className="modal-overlay" style={{ zIndex: 9999 }}>
+          <div style={{ position: 'fixed', top: '50%', left: '50%', transform: 'translate(-50%, -50%)', background: 'var(--bg-panel)', border: '1px solid var(--border-color)', color: 'var(--text-main)', padding: '2rem 3rem', borderRadius: '16px', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '1rem', fontWeight: 600, boxShadow: '0 20px 50px rgba(0,0,0,0.5)', zIndex: 10000, animation: 'fadeIn 0.3s ease-out' }}>
+            <CheckCircle size={56} color="var(--success)" />
+            <span style={{ fontSize: '1.3rem' }}>Baixa de parcela efetuada!</span>
+          </div>
         </div>
       )}
 

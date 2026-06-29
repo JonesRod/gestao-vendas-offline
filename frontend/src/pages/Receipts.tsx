@@ -26,6 +26,7 @@ export default function Receipts() {
   const [discountAmount, setDiscountAmount] = useState<number>(0);
   const [autoDiscount, setAutoDiscount] = useState<number>(0);
   const [nextDueDate, setNextDueDate] = useState('');
+  const [showConfirmPayment, setShowConfirmPayment] = useState(false);
   const [paymentMethod, setPaymentMethod] = useState<'cash' | 'pix' | 'card'>('cash');
   const [showSuccess, setShowSuccess] = useState(false);
   
@@ -153,6 +154,14 @@ export default function Receipts() {
       return;
     }
 
+    setShowConfirmPayment(true);
+  };
+
+  const executePayment = async () => {
+    if (!selectedCustomer || !selectedCustomer.id || !selectedInstallment || !selectedInstallment.id) return;
+    const finalExpected = selectedInstallment.amount - discountAmount;
+    const isPartial = paymentAmount < finalExpected;
+    
     try {
       if (!isPartial) {
         // 1. Marca parcela como paga integralmente
@@ -186,6 +195,7 @@ export default function Receipts() {
       });
 
       setIsPaymentModalOpen(false);
+      setShowConfirmPayment(false);
       setShowSuccess(true);
       
       await loadInitialData(); // reload customers and pending installments
@@ -550,10 +560,29 @@ export default function Receipts() {
         </form>
       </Modal>
 
+      <Modal isOpen={showConfirmPayment} onClose={() => setShowConfirmPayment(false)} title="Confirmar Recebimento">
+        <div style={{ display: 'flex', flexDirection: 'column', gap: '1.5rem', padding: '0.5rem 0' }}>
+          <p style={{ fontSize: '1.1rem', color: 'var(--text-main)' }}>Confirmar a baixa desta parcela?</p>
+          <div style={{ background: 'rgba(255,255,255,0.05)', padding: '1rem', borderRadius: '8px', border: '1px solid var(--border-color)' }}>
+            <p style={{ margin: '0 0 0.5rem 0' }}><strong style={{ color: 'var(--text-muted)' }}>Valor a Receber:</strong> R$ {paymentAmount.toLocaleString('pt-BR', {minimumFractionDigits: 2})}</p>
+            <p style={{ margin: '0 0 0.5rem 0' }}><strong style={{ color: 'var(--text-muted)' }}>Método:</strong> {paymentMethod === 'cash' ? 'Dinheiro' : paymentMethod === 'pix' ? 'PIX' : 'Cartão'}</p>
+            {selectedCustomer && (
+              <p style={{ margin: 0 }}><strong style={{ color: 'var(--text-muted)' }}>Cliente:</strong> {selectedCustomer.name}</p>
+            )}
+          </div>
+          <div style={{ display: 'flex', gap: '1rem' }}>
+            <button type="button" className="btn-secondary" style={{ flex: 1 }} onClick={() => setShowConfirmPayment(false)}>Cancelar</button>
+            <button type="button" className="btn-primary" style={{ flex: 1, background: 'var(--success)' }} onClick={executePayment}>Sim, Receber</button>
+          </div>
+        </div>
+      </Modal>
+
       {showSuccess && (
-        <div style={{ position: 'fixed', bottom: '2rem', right: '2rem', background: 'var(--success)', color: 'white', padding: '1rem 1.5rem', borderRadius: '12px', display: 'flex', alignItems: 'center', gap: '1rem', fontWeight: 600, boxShadow: '0 10px 30px rgba(16, 185, 129, 0.3)', zIndex: 2000, animation: 'fadeIn 0.3s ease-out' }}>
-          <CheckCircle size={24} />
-          <span>Baixa de parcela efetuada com sucesso!</span>
+        <div className="modal-overlay" style={{ zIndex: 9999 }}>
+          <div style={{ position: 'fixed', top: '50%', left: '50%', transform: 'translate(-50%, -50%)', background: 'var(--bg-panel)', border: '1px solid var(--border-color)', color: 'var(--text-main)', padding: '2rem 3rem', borderRadius: '16px', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '1rem', fontWeight: 600, boxShadow: '0 20px 50px rgba(0,0,0,0.5)', zIndex: 10000, animation: 'fadeIn 0.3s ease-out' }}>
+            <CheckCircle size={56} color="var(--success)" />
+            <span style={{ fontSize: '1.3rem' }}>Baixa de parcela efetuada!</span>
+          </div>
         </div>
       )}
     </div>

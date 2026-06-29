@@ -178,5 +178,10 @@ model Settings {
   email_token                  String?
   email_sender                 String?
 
+  online_payment_active        Boolean  @default(false)
+  payment_gateway              String?
+  payment_api_key              String?
+  payment_webhook_secret       String?
+
   updated_at                   DateTime?
 }
