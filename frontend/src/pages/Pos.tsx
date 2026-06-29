@@ -1,4 +1,4 @@
-import { Search, Trash2, CheckCircle, X, Banknote, CreditCard, MapPin, ShoppingCart, AlertCircle, Printer } from 'lucide-react';
+import { Search, Trash2, CheckCircle, X, Banknote, CreditCard, MapPin, ShoppingCart, AlertCircle, Printer, Share2 } from 'lucide-react';
 import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { api } from '../services/api';
@@ -66,7 +66,53 @@ export default function Pos() {
     setCustomerSearch('');
   };
 
-  const handleClearCustomer = () => {
+  const shareSaleReceipt = async (saleData: any) => {
+    if (!saleData) return;
+    const custName = saleData.customer?.name || 'Consumidor Final';
+    
+    let productsText = '';
+    if (saleData.cart && saleData.cart.length > 0) {
+       productsText = saleData.cart.map((i: any) => {
+         const price = saleData.paymentMethod === 'cash' ? i.price_cash : i.price_credit;
+         return `${i.quantity}x ${i.name || 'Produto'} (R$ ${(price * i.quantity).toLocaleString('pt-BR', {minimumFractionDigits:2})})`;
+       }).join('\n');
+    }
+
+    let extraInfo = '';
+    if (saleData.paymentMethod === 'credit') {
+       if (saleData.downPayment > 0) {
+         extraInfo += `\n*Entrada (Paga):* R$ ${saleData.downPayment.toLocaleString('pt-BR', {minimumFractionDigits: 2})}`;
+       }
+       if (saleData.installments && saleData.installments.length > 0) {
+         extraInfo += '\n\n*Vencimentos / Parcelas:*';
+         saleData.installments.forEach((inst: any, idx: number) => {
+           extraInfo += `\n${idx + 1}ª Parc: ${new Date(inst.due_date).toLocaleDateString('pt-BR')} - R$ ${inst.amount.toLocaleString('pt-BR', {minimumFractionDigits: 2})}`;
+         });
+       }
+    }
+
+    const text = `🧾 *RECIBO DE VENDA* 🧾
+-----------------------------------
+*Cliente:* ${custName}
+*Data:* ${new Date(saleData.date).toLocaleDateString('pt-BR')}
+*Valor Total:* R$ ${saleData.total.toLocaleString('pt-BR', {minimumFractionDigits: 2})}
+-----------------------------------
+*Produto(s):*
+${productsText}
+-----------------------------------
+*Forma de Pagamento:* ${saleData.paymentMethod === 'cash' ? 'Vista/Din/Pix' : 'Fiado/Cartão'}${extraInfo}
+-----------------------------------
+Obrigado pela preferência!`;
+
+    if (navigator.share) {
+      try { await navigator.share({ title: 'Recibo de Venda', text }); } 
+      catch (e) { if ((e as any).name !== 'AbortError') window.open(`https://wa.me/?text=${encodeURIComponent(text)}`, '_blank'); }
+    } else {
+      window.open(`https://wa.me/?text=${encodeURIComponent(text)}`, '_blank');
+    }
+  };
+
+  const handleCheckout = () => {
     setSelectedCustomer(null);
   };
 
@@ -226,6 +272,8 @@ export default function Pos() {
         paymentMethod,
         customer: selectedCustomer,
         date: new Date(),
+        installments: allInstallments,
+        downPayment: parseFloat(downPayment.replace(/\./g, '').replace(',', '.')) || 0
       });
 
       setCart([]);
@@ -524,8 +572,11 @@ export default function Pos() {
           <CheckCircle size={64} color="var(--success)" style={{ margin: '0 auto 1rem auto' }} />
           <h2 style={{ marginBottom: '1.5rem', color: 'var(--text-main)' }}>Venda Finalizada com Sucesso!</h2>
           <div style={{ display: 'flex', gap: '1rem', justifyContent: 'center' }}>
+            <button className="btn-secondary" style={{ flex: 1, padding: '1rem', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '0.5rem', background: '#25D366', color: 'white', border: 'none' }} onClick={() => shareSaleReceipt(lastSaleData)}>
+              <Share2 size={20} /> Compartilhar
+            </button>
             <button className="btn-secondary" style={{ flex: 1, padding: '1rem', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '0.5rem' }} onClick={() => window.print()}>
-              <Printer size={20} /> Imprimir Recibo
+              <Printer size={20} /> Imprimir
             </button>
             <button className="btn-primary" style={{ flex: 1, padding: '1rem' }} onClick={() => setShowSuccess(false)}>
               Nova Venda
@@ -573,7 +624,28 @@ export default function Pos() {
           <div className="receipt-totals">
             <p>Método: {lastSaleData.paymentMethod === 'cash' ? 'Dinheiro/Pix' : 'A Prazo/Fiado'}</p>
             <h3>TOTAL: R$ {lastSaleData.total.toFixed(2)}</h3>
+            {lastSaleData.downPayment > 0 && (
+              <p>Entrada (Paga): R$ {lastSaleData.downPayment.toFixed(2)}</p>
+            )}
           </div>
+          
+          {lastSaleData.installments && lastSaleData.installments.length > 0 && (
+            <>
+              <div className="receipt-divider"></div>
+              <p style={{textAlign: 'center', fontWeight: 'bold'}}>Vencimentos / Parcelas</p>
+              <table style={{ width: '100%', textAlign: 'left', fontSize: '12px', marginTop: '5px' }}>
+                <tbody>
+                  {lastSaleData.installments.map((inst: any, idx: number) => (
+                    <tr key={idx}>
+                      <td>{idx + 1}ª Parc.</td>
+                      <td>{inst.due_date.toLocaleDateString('pt-BR')}</td>
+                      <td style={{ textAlign: 'right' }}>R$ {inst.amount.toFixed(2)}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </>
+          )}
           
           <div className="receipt-footer">
             <p>Obrigado pela preferência!</p>

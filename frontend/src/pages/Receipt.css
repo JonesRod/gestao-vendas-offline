@@ -23,10 +23,11 @@
   
   /* Exibe a via térmica */
   .receipt-print-only, .receipt-print-only * {
-    visibility: visible;
+    visibility: visible !important;
   }
 
   .receipt-print-only {
+    display: block !important;
     position: absolute;
     top: 0;
     left: 0;

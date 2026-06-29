@@ -1088,6 +1088,31 @@ function ReceivedReport() {
   const customerMap = new Map(customers.map(c => [c.id, c.name]));
   const totalReceived = payments.reduce((sum, p) => sum + p.amount, 0);
 
+  const sharePaymentReceipt = async (pay: any) => {
+    const custName = customerMap.get(pay.customerId) || 'Cliente Excluído';
+    const text = `🧾 *RECIBO DE PAGAMENTO* 🧾
+-----------------------------------
+*Cliente:* ${custName}
+*Data:* ${new Date(pay.date).toLocaleDateString('pt-BR')}
+*Valor:* R$ ${pay.amount.toLocaleString('pt-BR', {minimumFractionDigits: 2})}
+-----------------------------------
+*Forma de Pagamento:* ${pay.method === 'cash' ? 'Dinheiro' : pay.method === 'pix' ? 'PIX' : 'Cartão'}
+-----------------------------------
+Obrigado pela preferência!`;
+
+    if (navigator.share) {
+      try {
+        await navigator.share({ title: 'Recibo', text });
+      } catch (e) {
+        if ((e as any).name !== 'AbortError') {
+          window.open(`https://wa.me/?text=${encodeURIComponent(text)}`, '_blank');
+        }
+      }
+    } else {
+      window.open(`https://wa.me/?text=${encodeURIComponent(text)}`, '_blank');
+    }
+  };
+
   return (
     <div className="glass-panel" style={{ padding: '2rem', borderRadius: '16px' }}>
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1.5rem', flexWrap: 'wrap', gap: '1rem' }}>
@@ -1105,6 +1130,7 @@ function ReceivedReport() {
               <th style={{ padding: '1rem', color: 'var(--text-muted)', fontWeight: 600 }}>Pagador (Cliente)</th>
               <th style={{ padding: '1rem', color: 'var(--text-muted)', fontWeight: 600 }}>Origem do Pagamento</th>
               <th style={{ padding: '1rem', color: 'var(--text-muted)', fontWeight: 600, textAlign: 'right' }}>Valor Baixado (R$)</th>
+              <th style={{ padding: '1rem', color: 'var(--text-muted)', fontWeight: 600, textAlign: 'center' }}>Ações</th>
             </tr>
           </thead>
           <tbody>
@@ -1123,6 +1149,11 @@ function ReceivedReport() {
                   </span>
                 </td>
                 <td data-label="Baixado (R$)" style={{ padding: '1rem', textAlign: 'right', fontWeight: 700, color: 'var(--success)', fontSize: '1.1rem' }}>R$ {pay.amount.toLocaleString('pt-BR', {minimumFractionDigits: 2, maximumFractionDigits: 2})}</td>
+                <td data-label="Ações" style={{ padding: '1rem', textAlign: 'center' }}>
+                  <button className="btn-secondary" title="Compartilhar Recibo" onClick={() => sharePaymentReceipt(pay)} style={{ padding: '0.4rem', borderRadius: '50%' }}>
+                    <Share2 size={16} />
+                  </button>
+                </td>
               </tr>
             ))}
             {payments.length > 0 && (

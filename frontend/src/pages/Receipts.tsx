@@ -142,11 +142,6 @@ export default function Receipts() {
       return;
     }
 
-    if (paymentAmount > finalExpected) {
-      alert('O valor informado é maior do que o total esperado com desconto.');
-      return;
-    }
-
     const isPartial = paymentAmount < finalExpected;
 
     if (isPartial && !nextDueDate) {
@@ -188,8 +183,10 @@ export default function Receipts() {
         });
       }
 
-      // 3. Abate do crédito utilizado (Dívida total = Dinheiro que pagou + Desconto que demos)
-      const newCreditUsed = selectedCustomer.credit_used - (paymentAmount + discountAmount);
+      // 3. Abate do crédito utilizado. Juros (valor a mais) não abatem a dívida original.
+      const interest = Math.max(0, paymentAmount - finalExpected);
+      const effectivePayment = paymentAmount - interest;
+      const newCreditUsed = selectedCustomer.credit_used - (effectivePayment + discountAmount);
       await api.put(`/customers/${selectedCustomer.id}`, {
         credit_used: Math.max(0, newCreditUsed) 
       });
@@ -206,11 +203,49 @@ export default function Receipts() {
       if (updatedCustomer) setSelectedCustomer(updatedCustomer);
       
       await loadCustomerInstallments(selectedCustomer.id);
-
-      setTimeout(() => setShowSuccess(false), 3000);
     } catch (err) {
       console.error(err);
       alert('Erro ao registrar pagamento da parcela.');
+    }
+  };
+
+  const shareReceipt = async (inst: any, cust: any, amountPaid: number) => {
+    if (!inst || !cust) return;
+    const finalExpected = inst.amount - discountAmount;
+    const interest = Math.max(0, amountPaid - finalExpected);
+    const remaining = Math.max(0, cust.credit_used - (amountPaid - interest) - discountAmount);
+    
+    let extrasText = '';
+    if (discountAmount > 0) extrasText += `\n*Desconto Aplicado:* R$ ${discountAmount.toLocaleString('pt-BR', {minimumFractionDigits: 2})}`;
+    if (interest > 0) extrasText += `\n*Juros/Multa:* R$ ${interest.toLocaleString('pt-BR', {minimumFractionDigits: 2})}`;
+    
+    const text = `🧾 *RECIBO DE PAGAMENTO* 🧾
+-----------------------------------
+*Cliente:* ${cust.name}
+*Data do Pagamento:* ${new Date().toLocaleDateString('pt-BR')}
+*Valor Pago:* R$ ${amountPaid.toLocaleString('pt-BR', {minimumFractionDigits: 2})}
+-----------------------------------
+*Cód. da Compra:* #${inst.saleId || 'N/A'}
+*Referente a:* Parcela ${inst.number}/${inst.total}
+*Produto(s):* ${inst.productName}${extrasText}
+-----------------------------------
+*Restante a Pagar (Dívida Atual):* R$ ${remaining.toLocaleString('pt-BR', {minimumFractionDigits: 2})}
+-----------------------------------
+Obrigado pela preferência!`;
+
+    if (navigator.share) {
+      try {
+        await navigator.share({
+          title: 'Recibo de Pagamento',
+          text: text,
+        });
+      } catch (error) {
+        if ((error as any).name !== 'AbortError') {
+          window.open(`https://wa.me/?text=${encodeURIComponent(text)}`, '_blank');
+        }
+      }
+    } else {
+      window.open(`https://wa.me/?text=${encodeURIComponent(text)}`, '_blank');
     }
   };
 
@@ -579,14 +614,20 @@ export default function Receipts() {
         </div>
       </Modal>
 
-      {showSuccess && (
-        <div className="modal-overlay" style={{ zIndex: 9999 }}>
-          <div style={{ position: 'fixed', top: '50%', left: '50%', transform: 'translate(-50%, -50%)', background: 'var(--bg-panel)', border: '1px solid var(--border-color)', color: 'var(--text-main)', padding: '2rem 3rem', borderRadius: '16px', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '1rem', fontWeight: 600, boxShadow: '0 20px 50px rgba(0,0,0,0.5)', zIndex: 10000, animation: 'fadeIn 0.3s ease-out' }}>
-            <CheckCircle size={56} color="var(--success)" />
-            <span style={{ fontSize: '1.3rem' }}>Baixa de parcela efetuada!</span>
+      <Modal isOpen={showSuccess} onClose={() => setShowSuccess(false)} title="Concluído">
+        <div style={{ textAlign: 'center', padding: '1rem 0' }}>
+          <CheckCircle size={64} color="var(--success)" style={{ margin: '0 auto 1rem auto' }} />
+          <h2 style={{ marginBottom: '1.5rem', color: 'var(--text-main)' }}>Recebimento Confirmado!</h2>
+          <div style={{ display: 'flex', gap: '1rem', justifyContent: 'center' }}>
+            <button className="btn-secondary" style={{ flex: 1, padding: '1rem', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '0.5rem' }} onClick={() => shareReceipt(selectedInstallment, selectedCustomer, paymentAmount)}>
+              <Share2 size={20} /> Compartilhar Recibo
+            </button>
+            <button className="btn-primary" style={{ flex: 1, padding: '1rem' }} onClick={() => setShowSuccess(false)}>
+              Fechar
+            </button>
           </div>
         </div>
-      )}
+      </Modal>
     </div>
   );
 }

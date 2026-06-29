@@ -122,7 +122,7 @@ app.delete('/api/products/:id', async (req, res) => {
 
 // Routes for Sales
 app.get('/api/sales', async (req, res) => {
-  const sales = await prisma.sale.findMany({ include: { items: true } });
+  const sales = await prisma.sale.findMany({ include: { items: { include: { product: true } }, installments: true } });
   res.json(sales);
 });
 

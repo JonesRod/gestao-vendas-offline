@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { useLocation } from 'react-router-dom';
-import { Search, Plus, UserX, UserCheck, Edit, DollarSign, Trash2, History } from 'lucide-react';
+import { Search, Plus, UserX, UserCheck, Edit, DollarSign, Trash2, History, Share2 } from 'lucide-react';
 import { api } from '../services/api';
 import type { Customer } from '../db/db';
 import Modal from '../components/Modal';
@@ -23,6 +23,67 @@ export default function Customers() {
   const [selectedHistoryCustomer, setSelectedHistoryCustomer] = useState<Customer | null>(null);
   const [customerSales, setCustomerSales] = useState<any[]>([]);
   const [customerPayments, setCustomerPayments] = useState<any[]>([]);
+
+  const sharePaymentReceipt = async (pay: any, custName: string) => {
+    // Pegar o crédito atual do cliente selecionado no histórico
+    const restante = selectedHistoryCustomer ? selectedHistoryCustomer.credit_used : 0;
+    
+    const text = `🧾 *RECIBO DE PAGAMENTO* 🧾
+-----------------------------------
+*Cliente:* ${custName}
+*Data:* ${new Date(pay.date).toLocaleDateString('pt-BR')}
+*Valor Baixado:* R$ ${pay.amount.toLocaleString('pt-BR', {minimumFractionDigits: 2})}
+-----------------------------------
+*Forma de Pagamento:* ${pay.method === 'cash' ? 'Dinheiro' : pay.method === 'pix' ? 'PIX' : 'Cartão'}
+*Restante a Pagar (Dívida Atual):* R$ ${restante.toLocaleString('pt-BR', {minimumFractionDigits: 2})}
+-----------------------------------
+Obrigado pela preferência!`;
+
+    if (navigator.share) {
+      try {
+        await navigator.share({ title: 'Recibo', text });
+      } catch (e) {
+        if ((e as any).name !== 'AbortError') {
+          window.open(`https://wa.me/?text=${encodeURIComponent(text)}`, '_blank');
+        }
+      }
+    } else {
+      window.open(`https://wa.me/?text=${encodeURIComponent(text)}`, '_blank');
+    }
+  };
+
+  const shareSaleReceipt = async (sale: any) => {
+    const custName = selectedHistoryCustomer?.name || 'Cliente';
+    
+    let productsText = '';
+    if (sale.items && sale.items.length > 0) {
+       productsText = sale.items.map((i: any) => `${i.quantity}x ${i.product?.name || 'Produto'}`).join('\n');
+    } else {
+       productsText = 'Itens não detalhados';
+    }
+
+    const text = `🧾 *RECIBO DE COMPRA* 🧾
+-----------------------------------
+*Cliente:* ${custName}
+*Cód. da Compra:* #${sale.id}
+*Data:* ${new Date(sale.date).toLocaleDateString('pt-BR')}
+*Valor Total:* R$ ${sale.totalAmount.toLocaleString('pt-BR', {minimumFractionDigits: 2})}
+-----------------------------------
+*Produto(s):*
+${productsText}
+-----------------------------------
+*Forma de Pagamento:* ${sale.paymentMethod === 'cash' ? 'Vista/Din/Pix' : 'Fiado/Cartão'}
+*Status:* ${sale.status === 'paid' ? 'Pago' : 'Pendente'}
+-----------------------------------
+Obrigado pela preferência!`;
+
+    if (navigator.share) {
+      try { await navigator.share({ title: 'Recibo de Compra', text }); } 
+      catch (e) { if ((e as any).name !== 'AbortError') window.open(`https://wa.me/?text=${encodeURIComponent(text)}`, '_blank'); }
+    } else {
+      window.open(`https://wa.me/?text=${encodeURIComponent(text)}`, '_blank');
+    }
+  };
 
   const fetchCustomers = async () => {
     try {
@@ -419,7 +480,12 @@ export default function Customers() {
                           <span style={{ color: 'var(--warning)' }}>Pendente</span>
                         )}
                       </td>
-                      <td style={{ padding: '0.8rem', textAlign: 'right', fontWeight: 'bold' }}>R$ {sale.totalAmount.toLocaleString('pt-BR', {minimumFractionDigits: 2, maximumFractionDigits: 2})}</td>
+                      <td style={{ padding: '0.8rem', textAlign: 'right', fontWeight: 'bold', display: 'flex', justifyContent: 'flex-end', alignItems: 'center', gap: '0.5rem' }}>
+                        R$ {sale.totalAmount.toLocaleString('pt-BR', {minimumFractionDigits: 2, maximumFractionDigits: 2})}
+                        <button className="btn-secondary" title="Compartilhar Recibo" onClick={() => shareSaleReceipt(sale)} style={{ padding: '0.3rem', borderRadius: '50%', border: 'none', background: 'transparent' }}>
+                          <Share2 size={16} style={{ color: 'var(--primary)', cursor: 'pointer' }} />
+                        </button>
+                      </td>
                     </tr>
                   ))}
                 </tbody>
@@ -445,7 +511,12 @@ export default function Customers() {
                     <tr key={pay.id} style={{ borderBottom: '1px solid rgba(255,255,255,0.05)' }}>
                       <td style={{ padding: '0.8rem' }}>{new Date(pay.date).toLocaleString()}</td>
                       <td style={{ padding: '0.8rem', textTransform: 'capitalize' }}>{pay.method === 'cash' ? 'Dinheiro' : pay.method === 'pix' ? 'PIX' : 'Cartão'}</td>
-                      <td style={{ padding: '0.8rem', textAlign: 'right', fontWeight: 'bold', color: 'var(--success)' }}>R$ {pay.amount.toLocaleString('pt-BR', {minimumFractionDigits: 2, maximumFractionDigits: 2})}</td>
+                      <td style={{ padding: '0.8rem', textAlign: 'right', fontWeight: 'bold', color: 'var(--success)', display: 'flex', justifyContent: 'flex-end', alignItems: 'center', gap: '0.5rem' }}>
+                        R$ {pay.amount.toLocaleString('pt-BR', {minimumFractionDigits: 2, maximumFractionDigits: 2})}
+                        <button className="btn-secondary" title="Compartilhar Recibo" onClick={() => sharePaymentReceipt(pay, selectedHistoryCustomer?.name || 'Cliente')} style={{ padding: '0.3rem', borderRadius: '50%', border: 'none', background: 'transparent' }}>
+                          <Share2 size={16} style={{ color: 'var(--primary)', cursor: 'pointer' }} />
+                        </button>
+                      </td>
                     </tr>
                   ))}
                 </tbody>
