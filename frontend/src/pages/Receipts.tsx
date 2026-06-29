@@ -524,7 +524,9 @@ export default function Receipts() {
 
           {paymentAmount < ((selectedInstallment?.amount || 0) - discountAmount) && paymentAmount > 0 && (
             <div className="form-group" style={{ marginTop: '1rem' }}>
-              <label style={{ color: 'var(--warning)' }}>Reagendar restante (Vencimento)</label>
+              <label style={{ color: 'var(--warning)' }}>
+                Reagendar restante (Vencimento Atual: {selectedInstallment?.due_date ? new Date(selectedInstallment.due_date).toLocaleDateString('pt-BR') : 'N/A'})
+              </label>
               <input 
                 type="date" 
                 required 

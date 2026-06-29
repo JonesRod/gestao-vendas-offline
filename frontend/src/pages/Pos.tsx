@@ -1,10 +1,11 @@
-import { Search, Trash2, CheckCircle, X, Banknote, CreditCard, MapPin, ShoppingCart, AlertCircle } from 'lucide-react';
+import { Search, Trash2, CheckCircle, X, Banknote, CreditCard, MapPin, ShoppingCart, AlertCircle, Printer } from 'lucide-react';
 import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { api } from '../services/api';
 import type { Customer, Product } from '../db/db';
 import Modal from '../components/Modal';
 import './Pos.css';
+import './Receipt.css';
 
 export default function Pos() {
   const [cart, setCart] = useState<any[]>([]);
@@ -16,6 +17,7 @@ export default function Pos() {
 
   // UI states
   const [showSuccess, setShowSuccess] = useState(false);
+  const [lastSaleData, setLastSaleData] = useState<any>(null);
   const [showDueDateModal, setShowDueDateModal] = useState(false);
   const [showAddressModal, setShowAddressModal] = useState(false);
   const [dueDate, setDueDate] = useState('');
@@ -218,6 +220,14 @@ export default function Pos() {
 
       await api.post('/sales', payload);
 
+      setLastSaleData({
+        cart: [...cart],
+        total: currentTotal,
+        paymentMethod,
+        customer: selectedCustomer,
+        date: new Date(),
+      });
+
       setCart([]);
       setSelectedCustomer(null);
       setPaymentMethod('cash');
@@ -231,8 +241,6 @@ export default function Pos() {
       setShowSuccess(true);
       
       loadData();
-      
-      setTimeout(() => setShowSuccess(false), 3000);
 
     } catch (error) {
       console.error("Erro ao salvar venda:", error);
@@ -510,11 +518,67 @@ export default function Pos() {
         </div>
       </div>
 
-      {/* TOAST DE SUCESSO */}
-      {showSuccess && (
-        <div className="toast-success">
-          <CheckCircle size={24} />
-          <span>Venda Finalizada com Sucesso!</span>
+      {/* MODAL DE SUCESSO (COM OPÇÃO DE IMPRIMIR) */}
+      <Modal isOpen={showSuccess} onClose={() => setShowSuccess(false)} title="Concluído">
+        <div style={{ textAlign: 'center', padding: '1rem 0' }}>
+          <CheckCircle size={64} color="var(--success)" style={{ margin: '0 auto 1rem auto' }} />
+          <h2 style={{ marginBottom: '1.5rem', color: 'var(--text-main)' }}>Venda Finalizada com Sucesso!</h2>
+          <div style={{ display: 'flex', gap: '1rem', justifyContent: 'center' }}>
+            <button className="btn-secondary" style={{ flex: 1, padding: '1rem', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '0.5rem' }} onClick={() => window.print()}>
+              <Printer size={20} /> Imprimir Recibo
+            </button>
+            <button className="btn-primary" style={{ flex: 1, padding: '1rem' }} onClick={() => setShowSuccess(false)}>
+              Nova Venda
+            </button>
+          </div>
+        </div>
+      </Modal>
+
+      {/* RECIBO TÉRMICO OCULTO (SOMENTE PARA IMPRESSÃO) */}
+      {lastSaleData && (
+        <div className="receipt-print-only">
+          <div className="receipt-header">
+            <h2>NOME DA SUA LOJA</h2>
+            <p>Rua Exemplo, 123 - Centro</p>
+            <p>CNPJ: 00.000.000/0001-00</p>
+            <p>Data: {lastSaleData.date.toLocaleString('pt-BR')}</p>
+          </div>
+          <div className="receipt-divider"></div>
+          <p>Cliente: {lastSaleData.customer ? lastSaleData.customer.name : 'Consumidor Final'}</p>
+          <div className="receipt-divider"></div>
+          
+          <table style={{ width: '100%', textAlign: 'left', fontSize: '12px' }}>
+            <thead>
+              <tr>
+                <th>Qtd</th>
+                <th>Item</th>
+                <th style={{ textAlign: 'right' }}>Total</th>
+              </tr>
+            </thead>
+            <tbody>
+              {lastSaleData.cart.map((item: any, i: number) => {
+                const price = lastSaleData.paymentMethod === 'cash' ? item.price_cash : item.price_credit;
+                return (
+                  <tr key={i}>
+                    <td>{item.quantity}x</td>
+                    <td>{item.name}</td>
+                    <td style={{ textAlign: 'right' }}>R$ {(price * item.quantity).toFixed(2)}</td>
+                  </tr>
+                );
+              })}
+            </tbody>
+          </table>
+
+          <div className="receipt-divider"></div>
+          <div className="receipt-totals">
+            <p>Método: {lastSaleData.paymentMethod === 'cash' ? 'Dinheiro/Pix' : 'A Prazo/Fiado'}</p>
+            <h3>TOTAL: R$ {lastSaleData.total.toFixed(2)}</h3>
+          </div>
+          
+          <div className="receipt-footer">
+            <p>Obrigado pela preferência!</p>
+            <p>Volte sempre.</p>
+          </div>
         </div>
       )}
 

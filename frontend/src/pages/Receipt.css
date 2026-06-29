@@ -1,0 +1,83 @@
+/* Receipt.css */
+
+.receipt-print-only {
+  display: none;
+}
+
+@media print {
+  /* Oculta tudo na tela de PDV e Sidebar */
+  body * {
+    visibility: hidden;
+  }
+  
+  /* Remove margens e ajusta o fundo para a impressão */
+  @page {
+    margin: 0;
+  }
+  body {
+    margin: 0;
+    padding: 0;
+    background: white;
+    color: black;
+  }
+  
+  /* Exibe a via térmica */
+  .receipt-print-only, .receipt-print-only * {
+    visibility: visible;
+  }
+
+  .receipt-print-only {
+    position: absolute;
+    top: 0;
+    left: 0;
+    width: 80mm; /* Largura padrão de impressoras térmicas */
+    padding: 10px;
+    font-family: 'Courier New', Courier, monospace;
+    font-size: 12px;
+    background: white;
+    color: black;
+  }
+  
+  .receipt-header {
+    text-align: center;
+    margin-bottom: 15px;
+    border-bottom: 1px dashed black;
+    padding-bottom: 10px;
+  }
+  .receipt-header h2 {
+    font-size: 16px;
+    margin: 0 0 5px 0;
+  }
+  .receipt-header p {
+    margin: 2px 0;
+    font-size: 10px;
+  }
+  
+  .receipt-item-row {
+    display: flex;
+    justify-content: space-between;
+    margin-bottom: 4px;
+  }
+  
+  .receipt-divider {
+    border-top: 1px dashed black;
+    margin: 10px 0;
+  }
+  
+  .receipt-totals {
+    text-align: right;
+  }
+  .receipt-totals p {
+    margin: 4px 0;
+  }
+  .receipt-totals h3 {
+    margin: 5px 0;
+    font-size: 14px;
+  }
+  
+  .receipt-footer {
+    text-align: center;
+    margin-top: 20px;
+    font-size: 10px;
+  }
+}

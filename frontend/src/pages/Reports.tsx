@@ -8,6 +8,7 @@ import Modal from '../components/Modal';
 import { maskCurrency, parseCurrency } from '../utils/masks';
 import jsPDF from 'jspdf';
 import autoTable from 'jspdf-autotable';
+import * as XLSX from 'xlsx';
 
 function getDistanceFromLatLonInKm(lat1: number, lon1: number, lat2: number, lon2: number) {
   var R = 6371;
@@ -174,6 +175,16 @@ export default function Reports() {
     doc.save(`relatorio_${reportType}_${new Date().getTime()}.pdf`);
   };
 
+  const generateExcel = () => {
+    const table = document.getElementById('report-table') as HTMLTableElement;
+    if (!table) {
+      alert("Nenhuma tabela detalhada disponível para exportar.");
+      return;
+    }
+    const wb = XLSX.utils.table_to_book(table, { sheet: "Relatorio" });
+    XLSX.writeFile(wb, `relatorio_${reportType || 'vendas'}.xlsx`);
+  };
+
   if (!reportType) {
     return (
       <div style={{ animation: 'fadeIn 0.3s ease-out' }}>
@@ -248,7 +259,7 @@ export default function Reports() {
       </div>
 
       {reportType === 'dashboard' && <DashboardReport />}
-      {reportType === 'sales' && <SalesReport />}
+      {reportType === 'sales' && <SalesReport onExportPDF={generatePDF} onExportExcel={generateExcel} />}
       {reportType === 'inventory' && <InventoryReport />}
       {reportType === 'receivables' && <ReceivablesReport />}
       {reportType === 'received' && <ReceivedReport />}
@@ -372,7 +383,7 @@ function DashboardReport() {
   );
 }
 
-function SalesReport() {
+function SalesReport({ onExportPDF, onExportExcel }: { onExportPDF?: () => void, onExportExcel?: () => void }) {
   const [sales, setSales] = useState<any[]>([]);
   useEffect(() => {
     api.get('/sales').then(res => {
@@ -390,9 +401,14 @@ function SalesReport() {
           <FileText size={20} className="text-success" />
           Últimas Vendas
         </h3>
-        <button className="btn-secondary" style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', padding: '0.5rem 1rem', borderRadius: '8px' }}>
-          <Download size={16} /> Exportar Excel
-        </button>
+        <div style={{ display: 'flex', gap: '0.5rem' }}>
+          <button className="btn-secondary" onClick={onExportPDF} style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', padding: '0.5rem 1rem', borderRadius: '8px' }}>
+            <FileText size={16} /> Exportar PDF
+          </button>
+          <button className="btn-secondary" onClick={onExportExcel} style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', padding: '0.5rem 1rem', borderRadius: '8px' }}>
+            <Download size={16} /> Exportar Excel
+          </button>
+        </div>
       </div>
 
       <div style={{ overflowX: 'auto' }}>

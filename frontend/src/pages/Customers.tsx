@@ -248,9 +248,6 @@ export default function Customers() {
                     <Trash2 size={18} /> Excluir
                   </button>
                 </div>
-                <div className="due-date">
-                  Vencimento: dia {customer.due_date || '--'}
-                </div>
               </div>
             </div>
           );
