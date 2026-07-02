@@ -10,7 +10,7 @@ import './Receipt.css';
 export default function Pos() {
   const [cart, setCart] = useState<any[]>([]);
   const [searchTerm, setSearchTerm] = useState('');
-  const [paymentMethod, setPaymentMethod] = useState<'cash' | 'credit'>('cash');
+  const [splitPayments, setSplitPayments] = useState<Record<string, number>>({ dinheiro: 0 });
   const [selectedCustomer, setSelectedCustomer] = useState<Customer | null>(null);
   const [customerSearch, setCustomerSearch] = useState('');
   const navigate = useNavigate();
@@ -73,13 +73,13 @@ export default function Pos() {
     let productsText = '';
     if (saleData.cart && saleData.cart.length > 0) {
        productsText = saleData.cart.map((i: any) => {
-         const price = saleData.paymentMethod === 'cash' ? i.price_cash : i.price_credit;
+         const price = !saleData.isCreditSale ? i.price_cash : i.price_credit;
          return `${i.quantity}x ${i.name || 'Produto'} (R$ ${(price * i.quantity).toLocaleString('pt-BR', {minimumFractionDigits:2})})`;
        }).join('\n');
     }
 
     let extraInfo = '';
-    if (saleData.paymentMethod === 'credit') {
+    if (saleData.isCreditSale) {
        if (saleData.downPayment > 0) {
          extraInfo += `\n*Entrada (Paga):* R$ ${saleData.downPayment.toLocaleString('pt-BR', {minimumFractionDigits: 2})}`;
        }
@@ -100,7 +100,7 @@ export default function Pos() {
 *Produto(s):*
 ${productsText}
 -----------------------------------
-*Forma de Pagamento:* ${saleData.paymentMethod === 'cash' ? 'Vista/Din/Pix' : 'Fiado/Cartão'}${extraInfo}
+*Forma de Pagamento:* ${saleData.isCreditSale ? 'Fiado/Cartão' : 'Dinheiro/Pix'}${extraInfo}
 -----------------------------------
 Obrigado pela preferência!`;
 
@@ -146,10 +146,40 @@ Obrigado pela preferência!`;
     setCart(cart.map(item => item.id === id ? { ...item, selected_installments } : item));
   };
 
+  const isCreditSale = 'cartao_credito' in splitPayments || 'fiado' in splitPayments;
+
   const currentTotal = cart.reduce((sum, item) => {
-    const price = paymentMethod === 'cash' ? item.price_cash : item.price_credit;
+    const price = !isCreditSale ? item.price_cash : item.price_credit;
     return sum + (price * item.quantity);
   }, 0);
+
+  useEffect(() => {
+    const methods = Object.keys(splitPayments);
+    if (methods.length === 1) {
+      setSplitPayments({ [methods[0]]: currentTotal });
+    }
+  }, [currentTotal]);
+
+  const handleSplitChange = (method: string, valueStr: string) => {
+    const value = valueStr.replace(/\D/g, '');
+    const numericValue = parseInt(value, 10) / 100;
+    setSplitPayments(prev => ({
+      ...prev,
+      [method]: isNaN(numericValue) ? 0 : numericValue
+    }));
+  };
+
+  const togglePaymentMethod = (method: string) => {
+    setSplitPayments(prev => {
+      const next = { ...prev };
+      if (next[method] !== undefined) {
+        delete next[method];
+      } else {
+        next[method] = 0;
+      }
+      return next;
+    });
+  };
 
   const filteredProducts = products.filter((p: Product) =>
     p.name.toLowerCase().includes(searchTerm.toLowerCase())
@@ -176,35 +206,49 @@ Obrigado pela preferência!`;
   const handleFinalizeSale = async () => {
     if (cart.length === 0) return;
 
-    if (paymentMethod === 'credit') {
+    const methods = Object.keys(splitPayments);
+    if (methods.length === 0) {
+      setAlertMessage('Selecione pelo menos um método de pagamento.');
+      return;
+    }
+
+    const sum = methods.reduce((acc, method) => acc + splitPayments[method], 0);
+    if (Math.abs(sum - currentTotal) > 0.01) {
+      setAlertMessage(`A soma dos pagamentos (R$ ${sum.toFixed(2)}) não bate com o valor total (R$ ${currentTotal.toFixed(2)}).`);
+      return;
+    }
+
+    if (isCreditSale) {
       const forbiddenProducts = cart.filter(item => item.allow_credit === false);
       if (forbiddenProducts.length > 0) {
-        setAlertMessage("Há itens no carrinho que NÃO permitem venda a prazo (fiado): " + forbiddenProducts.map(i => i.name).join(', '));
+        setAlertMessage("Há itens no carrinho que NÃO permitem venda a prazo (fiado/cartão): " + forbiddenProducts.map(i => i.name).join(', '));
         return;
       }
 
-      if (!selectedCustomer) {
-        setAlertMessage("Para vendas a prazo/fiado, é obrigatório vincular um cliente!");
-        return;
-      }
+      if ('fiado' in splitPayments) {
+        if (!selectedCustomer) {
+          setAlertMessage("Para vendas no fiado, é obrigatório vincular um cliente!");
+          return;
+        }
 
-      if (selectedCustomer.is_blocked) {
-        setAlertMessage("Cliente bloqueado para compras a prazo!");
-        return;
-      }
+        if (selectedCustomer.is_blocked) {
+          setAlertMessage("Cliente bloqueado para compras a prazo!");
+          return;
+        }
 
-      const availableCredit = selectedCustomer.credit_limit - selectedCustomer.credit_used;
-      if (currentTotal > availableCredit) {
-        setAlertMessage(`Limite insuficiente! Limite disponível: R$ ${availableCredit.toLocaleString('pt-BR', {minimumFractionDigits: 2, maximumFractionDigits: 2})}`);
-        return;
-      }
+        const availableCredit = selectedCustomer.credit_limit - selectedCustomer.credit_used;
+        if (splitPayments['fiado'] > availableCredit) {
+          setAlertMessage(`Limite insuficiente! Limite disponível: R$ ${availableCredit.toLocaleString('pt-BR', {minimumFractionDigits: 2, maximumFractionDigits: 2})}`);
+          return;
+        }
 
-      if (!showDueDateModal) {
-        const defaultDate = new Date();
-        defaultDate.setDate(defaultDate.getDate() + 30);
-        setDueDate(defaultDate.toISOString().split('T')[0]);
-        setShowDueDateModal(true);
-        return;
+        if (!showDueDateModal) {
+          const defaultDate = new Date();
+          defaultDate.setDate(defaultDate.getDate() + 30);
+          setDueDate(defaultDate.toISOString().split('T')[0]);
+          setShowDueDateModal(true);
+          return;
+        }
       }
     }
     
@@ -215,7 +259,19 @@ Obrigado pela preferência!`;
   const executeFinalizeSale = async () => {
     try {
       const allInstallments: any[] = [];
-      if (paymentMethod === 'credit' && selectedCustomer?.id) {
+      const methods = Object.keys(splitPayments);
+      
+      let finalPaymentMethodStr = '';
+      if (methods.length === 1 && splitPayments[methods[0]] === currentTotal) {
+        finalPaymentMethodStr = methods[0];
+      } else {
+        const splitArr = methods.map(m => ({ method: m, amount: splitPayments[m] })).filter(m => m.amount > 0);
+        finalPaymentMethodStr = JSON.stringify(splitArr);
+      }
+
+      const isFiado = 'fiado' in splitPayments;
+
+      if (isFiado && selectedCustomer?.id) {
         const [y, m, d] = dueDate.split('-');
         const baseYear = Number(y);
         const baseMonth = Number(m) - 1;
@@ -251,15 +307,15 @@ Obrigado pela preferência!`;
       const payload = {
         customerId: selectedCustomer?.id,
         totalAmount: currentTotal,
-        paymentMethod: paymentMethod,
-        status: paymentMethod === 'credit' ? 'pending' : 'paid',
+        paymentMethod: finalPaymentMethodStr,
+        status: isFiado ? 'pending' : 'paid',
         date: new Date(saleDate + 'T12:00:00Z'),
-        due_date: paymentMethod === 'credit' ? new Date(dueDate) : undefined,
+        due_date: isFiado ? new Date(dueDate) : undefined,
         invoice_number: manualInvoiceNumber || undefined,
         items: cart.map(item => ({
           productId: item.id,
           quantity: item.quantity,
-          price_applied: paymentMethod === 'cash' ? item.price_cash : item.price_credit
+          price_applied: !isCreditSale ? item.price_cash : item.price_credit
         })),
         installments: allInstallments
       };
@@ -269,7 +325,8 @@ Obrigado pela preferência!`;
       setLastSaleData({
         cart: [...cart],
         total: currentTotal,
-        paymentMethod,
+        paymentMethod: finalPaymentMethodStr,
+        isCreditSale,
         customer: selectedCustomer,
         date: new Date(),
         installments: allInstallments,
@@ -278,7 +335,7 @@ Obrigado pela preferência!`;
 
       setCart([]);
       setSelectedCustomer(null);
-      setPaymentMethod('cash');
+      setSplitPayments({ dinheiro: 0 });
       setCustomerSearch('');
       setSearchTerm('');
       setSaleDate(new Date().toISOString().split('T')[0]);
@@ -452,19 +509,40 @@ Obrigado pela preferência!`;
 
         <div className="cart-area">
           <div className="cart-table-container">
-            <div className="payment-method-selector-horizontal">
-              <button
-                className={`method-btn ${paymentMethod === 'cash' ? 'active' : ''}`}
-                onClick={() => setPaymentMethod('cash')}
-              >
-                <Banknote size={18} /> Dinheiro/Pix
-              </button>
-              <button
-                className={`method-btn ${paymentMethod === 'credit' ? 'active' : ''}`}
-                onClick={() => setPaymentMethod('credit')}
-              >
-                <CreditCard size={18} /> Prazo/Cartão
-              </button>
+            <div className="payment-method-selector-horizontal" style={{ flexWrap: 'wrap' }}>
+              {[
+                { id: 'dinheiro', label: 'Dinheiro' },
+                { id: 'pix', label: 'PIX' },
+                { id: 'cartao_debito', label: 'Cartão Débito' },
+                { id: 'cartao_credito', label: 'Cartão Crédito' },
+                { id: 'fiado', label: 'Fiado/Prazo' }
+              ].map(opt => {
+                const isChecked = splitPayments[opt.id] !== undefined;
+                return (
+                  <div key={opt.id} style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-start', gap: '5px', padding: '5px 10px', background: isChecked ? 'rgba(99, 102, 241, 0.1)' : 'transparent', borderRadius: '4px', border: isChecked ? '1px solid var(--primary)' : '1px solid transparent' }}>
+                    <label style={{ display: 'flex', alignItems: 'center', gap: '5px', cursor: 'pointer', margin: 0, fontSize: '0.9rem' }}>
+                      <input 
+                        type="checkbox" 
+                        checked={isChecked}
+                        onChange={() => togglePaymentMethod(opt.id)}
+                        style={{ cursor: 'pointer' }}
+                      />
+                      <span style={{ fontWeight: isChecked ? 600 : 400 }}>{opt.label}</span>
+                    </label>
+                    {isChecked && (
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '5px', width: '100%', paddingLeft: '18px' }}>
+                        <span style={{ color: 'var(--text-muted)', fontSize: '0.8rem' }}>R$</span>
+                        <input 
+                          type="text"
+                          value={splitPayments[opt.id].toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                          onChange={e => handleSplitChange(opt.id, e.target.value)}
+                          style={{ width: '100%', maxWidth: '100px', padding: '4px', borderRadius: '4px', border: '1px solid var(--border-color)', background: 'var(--bg-panel)', color: 'var(--text-main)', fontSize: '0.85rem' }}
+                        />
+                      </div>
+                    )}
+                  </div>
+                );
+              })}
             </div>
             <table className="cart-table">
               <thead>
@@ -472,7 +550,7 @@ Obrigado pela preferência!`;
                   <th style={{ width: '60px' }}>Qtd</th>
                   <th>Produto</th>
                   <th>Valor Unit.</th>
-                  {paymentMethod === 'credit' && <th>Parcelas</th>}
+                  {isCreditSale && <th>Parcelas</th>}
                   <th>Total</th>
                   <th style={{ width: '40px' }}></th>
                 </tr>
@@ -487,7 +565,7 @@ Obrigado pela preferência!`;
                   </tr>
                 ) : (
                   cart.map(item => {
-                    const itemPrice = paymentMethod === 'cash' ? item.price_cash : item.price_credit;
+                    const itemPrice = !isCreditSale ? item.price_cash : item.price_credit;
                     return (
                       <tr key={item.id}>
                         <td>
@@ -499,7 +577,7 @@ Obrigado pela preferência!`;
                         </td>
                         <td className="product-name-cell">{item.name}</td>
                         <td>R$ {itemPrice.toLocaleString('pt-BR', {minimumFractionDigits: 2})}</td>
-                        {paymentMethod === 'credit' && (
+                        {isCreditSale && (
                           <td>
                             {item.allow_credit !== false ? (
                               <select
@@ -608,7 +686,7 @@ Obrigado pela preferência!`;
             </thead>
             <tbody>
               {lastSaleData.cart.map((item: any, i: number) => {
-                const price = lastSaleData.paymentMethod === 'cash' ? item.price_cash : item.price_credit;
+                const price = !lastSaleData.isCreditSale ? item.price_cash : item.price_credit;
                 return (
                   <tr key={i}>
                     <td>{item.quantity}x</td>
@@ -622,7 +700,7 @@ Obrigado pela preferência!`;
 
           <div className="receipt-divider"></div>
           <div className="receipt-totals">
-            <p>Método: {lastSaleData.paymentMethod === 'cash' ? 'Dinheiro/Pix' : 'A Prazo/Fiado'}</p>
+            <p>Método: {lastSaleData.isCreditSale ? 'A Prazo/Cartão' : 'Dinheiro/Pix'}</p>
             <h3>TOTAL: R$ {lastSaleData.total.toFixed(2)}</h3>
             {lastSaleData.downPayment > 0 && (
               <p>Entrada (Paga): R$ {lastSaleData.downPayment.toFixed(2)}</p>
@@ -806,7 +884,7 @@ Obrigado pela preferência!`;
           
           <div style={{ background: 'rgba(255,255,255,0.05)', padding: '1rem', borderRadius: '8px', border: '1px solid var(--border-color)' }}>
             <p style={{ margin: '0 0 0.5rem 0' }}><strong style={{ color: 'var(--text-muted)' }}>Total:</strong> R$ {currentTotal.toLocaleString('pt-BR', {minimumFractionDigits: 2})}</p>
-            <p style={{ margin: '0 0 0.5rem 0' }}><strong style={{ color: 'var(--text-muted)' }}>Método:</strong> {paymentMethod === 'cash' ? 'Dinheiro/Pix' : 'Prazo/Cartão'}</p>
+            <p style={{ margin: '0 0 0.5rem 0' }}><strong style={{ color: 'var(--text-muted)' }}>Métodos:</strong> {Object.keys(splitPayments).join(', ')}</p>
             {selectedCustomer && (
               <p style={{ margin: 0 }}><strong style={{ color: 'var(--text-muted)' }}>Cliente:</strong> {selectedCustomer.name}</p>
             )}

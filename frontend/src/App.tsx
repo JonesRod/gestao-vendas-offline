@@ -9,6 +9,8 @@ import Settings from './pages/Settings';
 import Receipts from './pages/Receipts';
 import Reports from './pages/Reports';
 import Login from './pages/Login';
+import StockEntries from './pages/StockEntries';
+import Finances from './pages/Finances';
 import { AuthProvider } from './contexts/AuthContext';
 import ProtectedRoute from './components/ProtectedRoute';
 import './App.css';
@@ -42,6 +44,8 @@ function App() {
             <Route path="receipts" element={<Receipts />} />
             <Route path="customers" element={<Customers />} />
             <Route path="inventory" element={<Inventory />} />
+            <Route path="stock-entries" element={<StockEntries />} />
+            <Route path="finances" element={<Finances />} />
             <Route path="funcionarios" element={<Employees />} />
             <Route path="reports" element={<Reports />} />
             <Route path="settings" element={<Settings />} />

@@ -64,6 +64,7 @@ model Product {
   saleItems        SaleItem[]
   kitItemsParent   KitItem[]  @relation("ParentProduct")
   kitItemsChild    KitItem[]  @relation("ChildProduct")
+  stockEntryItems  StockEntryItem[]
 }
 
 model KitItem {
@@ -184,4 +185,36 @@ model Settings {
   payment_webhook_secret       String?
 
   updated_at                   DateTime?
+}
+
+model StockEntry {
+  id            Int      @id @default(autoincrement())
+  date          DateTime @default(now())
+  totalAmount   Float
+  paymentMethod String
+  supplier      String?
+  notes         String?
+  
+  items         StockEntryItem[]
+}
+
+model StockEntryItem {
+  id           Int      @id @default(autoincrement())
+  stockEntryId Int
+  productId    Int
+  quantity     Int
+  unitCost     Float
+
+  stockEntry   StockEntry @relation(fields: [stockEntryId], references: [id])
+  product      Product    @relation(fields: [productId], references: [id])
+}
+
+model Expense {
+  id            Int      @id @default(autoincrement())
+  date          DateTime @default(now())
+  description   String
+  amount        Float
+  type          String   // 'EXPENSE' ou 'COST' ou 'STOCK_PURCHASE'
+  category      String?
+  paymentMethod String
 }

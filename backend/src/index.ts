@@ -185,6 +185,105 @@ app.post('/api/sales', async (req, res) => {
   }
 });
 
+// Routes for Stock Entries
+app.get('/api/stock-entries', async (req, res) => {
+  const entries = await prisma.stockEntry.findMany({
+    include: { items: { include: { product: true } } },
+    orderBy: { date: 'desc' }
+  });
+  res.json(entries);
+});
+
+app.post('/api/stock-entries', async (req, res) => {
+  const { items, ...entryData } = req.body;
+
+  try {
+    const result = await prisma.$transaction(async (tx) => {
+      // Cria a entrada de estoque
+      const entry = await tx.stockEntry.create({
+        data: {
+          ...entryData,
+          items: {
+            create: items.map((item: any) => ({
+              productId: item.productId,
+              quantity: item.quantity,
+              unitCost: item.unitCost
+            }))
+          }
+        },
+        include: { items: true }
+      });
+
+      // Cria a despesa associada
+      await tx.expense.create({
+        data: {
+          description: `Compra de estoque #${entry.id}`,
+          amount: entry.totalAmount,
+          type: 'STOCK_PURCHASE',
+          category: 'Estoque',
+          paymentMethod: entry.paymentMethod
+        }
+      });
+
+      // Atualiza os produtos
+      for (const item of items) {
+        const product = await tx.product.findUnique({ where: { id: item.productId } });
+        if (product) {
+          // Mantém o preço de venda, ajusta as margens com base no novo custo
+          const newCost = item.unitCost;
+          const newMarginCash = ((product.price_cash - newCost) / newCost) * 100;
+          const newMarginCredit = ((product.price_credit - newCost) / newCost) * 100;
+          
+          await tx.product.update({
+            where: { id: product.id },
+            data: { 
+              stock: product.stock + item.quantity,
+              cost: newCost,
+              margin_cash: newMarginCash,
+              margin_credit: newMarginCredit
+            }
+          });
+        }
+      }
+
+      return entry;
+    });
+
+    res.json(result);
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: 'Erro ao criar entrada de estoque' });
+  }
+});
+
+// Routes for Expenses
+app.get('/api/expenses', async (req, res) => {
+  const expenses = await prisma.expense.findMany({
+    orderBy: { date: 'desc' }
+  });
+  res.json(expenses);
+});
+
+app.post('/api/expenses', async (req, res) => {
+  const expense = await prisma.expense.create({ data: req.body });
+  res.json(expense);
+});
+
+app.put('/api/expenses/:id', async (req, res) => {
+  const { id } = req.params;
+  const expense = await prisma.expense.update({
+    where: { id: Number(id) },
+    data: req.body
+  });
+  res.json(expense);
+});
+
+app.delete('/api/expenses/:id', async (req, res) => {
+  const { id } = req.params;
+  await prisma.expense.delete({ where: { id: Number(id) } });
+  res.json({ success: true });
+});
+
 // Routes for Installments
 app.get('/api/installments', async (req, res) => {
   const { customerId, status } = req.query;

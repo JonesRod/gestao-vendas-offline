@@ -27,7 +27,7 @@ export default function Receipts() {
   const [autoDiscount, setAutoDiscount] = useState<number>(0);
   const [nextDueDate, setNextDueDate] = useState('');
   const [showConfirmPayment, setShowConfirmPayment] = useState(false);
-  const [paymentMethod, setPaymentMethod] = useState<'cash' | 'pix' | 'card'>('cash');
+  const [splitPayments, setSplitPayments] = useState<Record<string, number>>({ dinheiro: 0 });
   const [showSuccess, setShowSuccess] = useState(false);
   
   const settings = useLiveQuery(() => db.settings.toCollection().first());
@@ -128,6 +128,7 @@ export default function Receipts() {
 
     setPaymentAmount(installment.amount - calcAutoDiscount);
     setNextDueDate('');
+    setSplitPayments({ dinheiro: installment.amount - calcAutoDiscount });
     setIsPaymentModalOpen(true);
   };
 
@@ -139,6 +140,18 @@ export default function Receipts() {
 
     if (paymentAmount <= 0 && finalExpected > 0) {
       alert('Valor de pagamento inválido.');
+      return;
+    }
+
+    const methods = Object.keys(splitPayments);
+    if (methods.length === 0) {
+      alert('Selecione pelo menos um método de pagamento.');
+      return;
+    }
+
+    const sum = methods.reduce((acc, method) => acc + splitPayments[method], 0);
+    if (Math.abs(sum - paymentAmount) > 0.01) {
+      alert(`A soma dos pagamentos (R$ ${sum.toFixed(2)}) não bate com o valor informado (R$ ${paymentAmount.toFixed(2)}).`);
       return;
     }
 
@@ -175,10 +188,19 @@ export default function Receipts() {
 
       // 2. Registra o dinheiro físico que entrou
       if (paymentAmount > 0) {
+        const methods = Object.keys(splitPayments);
+        let finalPaymentMethodStr = '';
+        if (methods.length === 1 && splitPayments[methods[0]] === paymentAmount) {
+          finalPaymentMethodStr = methods[0];
+        } else {
+          const splitArr = methods.map(m => ({ method: m, amount: splitPayments[m] })).filter(m => m.amount > 0);
+          finalPaymentMethodStr = JSON.stringify(splitArr);
+        }
+
         await api.post('/payments', {
           customerId: selectedCustomer.id,
           amount: paymentAmount,
-          method: paymentMethod,
+          method: finalPaymentMethodStr,
           date: new Date()
         });
       }
@@ -573,20 +595,57 @@ Obrigado pela preferência!`;
           )}
 
           <div className="form-group" style={{ marginTop: '1rem' }}>
-            <label style={{ marginBottom: '0.8rem' }}>Forma de Recebimento</label>
-            <div className="payment-methods-grid" style={{ display: 'flex', gap: '0.5rem' }}>
-              <label style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', cursor: 'pointer', background: paymentMethod === 'cash' ? 'rgba(99, 102, 241, 0.1)' : 'transparent', border: paymentMethod === 'cash' ? '1px solid var(--primary)' : '1px solid var(--border-color)', padding: '0.8rem', borderRadius: '8px', flex: 1, justifyContent: 'center' }}>
-                <input type="radio" name="method" checked={paymentMethod === 'cash'} onChange={() => setPaymentMethod('cash')} style={{display:'none'}} />
-                <span style={{ fontWeight: paymentMethod === 'cash' ? 600 : 400, color: paymentMethod === 'cash' ? 'var(--primary)' : 'var(--text-main)' }}>Dinheiro</span>
-              </label>
-              <label style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', cursor: 'pointer', background: paymentMethod === 'pix' ? 'rgba(99, 102, 241, 0.1)' : 'transparent', border: paymentMethod === 'pix' ? '1px solid var(--primary)' : '1px solid var(--border-color)', padding: '0.8rem', borderRadius: '8px', flex: 1, justifyContent: 'center' }}>
-                <input type="radio" name="method" checked={paymentMethod === 'pix'} onChange={() => setPaymentMethod('pix')} style={{display:'none'}} />
-                <span style={{ fontWeight: paymentMethod === 'pix' ? 600 : 400, color: paymentMethod === 'pix' ? 'var(--primary)' : 'var(--text-main)' }}>PIX</span>
-              </label>
-              <label style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', cursor: 'pointer', background: paymentMethod === 'card' ? 'rgba(99, 102, 241, 0.1)' : 'transparent', border: paymentMethod === 'card' ? '1px solid var(--primary)' : '1px solid var(--border-color)', padding: '0.8rem', borderRadius: '8px', flex: 1, justifyContent: 'center' }}>
-                <input type="radio" name="method" checked={paymentMethod === 'card'} onChange={() => setPaymentMethod('card')} style={{display:'none'}} />
-                <span style={{ fontWeight: paymentMethod === 'card' ? 600 : 400, color: paymentMethod === 'card' ? 'var(--primary)' : 'var(--text-main)' }}>Cartão</span>
-              </label>
+            <label style={{ marginBottom: '0.8rem' }}>Métodos de Pagamento</label>
+            <div className="payment-method-selector-horizontal" style={{ flexWrap: 'wrap' }}>
+              {[
+                { id: 'dinheiro', label: 'Dinheiro' },
+                { id: 'pix', label: 'PIX' },
+                { id: 'cartao_debito', label: 'Cartão Débito' },
+                { id: 'cartao_credito', label: 'Cartão Crédito' }
+              ].map(opt => {
+                const isChecked = splitPayments[opt.id] !== undefined;
+                return (
+                  <div key={opt.id} style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-start', gap: '5px', padding: '5px 10px', background: isChecked ? 'rgba(99, 102, 241, 0.1)' : 'transparent', borderRadius: '4px', border: isChecked ? '1px solid var(--primary)' : '1px solid transparent' }}>
+                    <label style={{ display: 'flex', alignItems: 'center', gap: '5px', cursor: 'pointer', margin: 0, fontSize: '0.9rem' }}>
+                      <input 
+                        type="checkbox" 
+                        checked={isChecked}
+                        onChange={() => {
+                          setSplitPayments(prev => {
+                            const next = { ...prev };
+                            if (next[opt.id] !== undefined) {
+                              delete next[opt.id];
+                            } else {
+                              next[opt.id] = 0;
+                            }
+                            return next;
+                          });
+                        }}
+                        style={{ cursor: 'pointer' }}
+                      />
+                      <span style={{ fontWeight: isChecked ? 600 : 400 }}>{opt.label}</span>
+                    </label>
+                    {isChecked && (
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '5px', width: '100%', paddingLeft: '18px' }}>
+                        <span style={{ color: 'var(--text-muted)', fontSize: '0.8rem' }}>R$</span>
+                        <input 
+                          type="text"
+                          value={splitPayments[opt.id].toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                          onChange={e => {
+                            const valueStr = e.target.value.replace(/\D/g, '');
+                            const numericValue = parseInt(valueStr, 10) / 100;
+                            setSplitPayments(prev => ({
+                              ...prev,
+                              [opt.id]: isNaN(numericValue) ? 0 : numericValue
+                            }));
+                          }}
+                          style={{ width: '100%', maxWidth: '100px', padding: '4px', borderRadius: '4px', border: '1px solid var(--border-color)', background: 'var(--bg-panel)', color: 'var(--text-main)', fontSize: '0.85rem' }}
+                        />
+                      </div>
+                    )}
+                  </div>
+                );
+              })}
             </div>
           </div>
 
@@ -602,7 +661,7 @@ Obrigado pela preferência!`;
           <p style={{ fontSize: '1.1rem', color: 'var(--text-main)' }}>Confirmar a baixa desta parcela?</p>
           <div style={{ background: 'rgba(255,255,255,0.05)', padding: '1rem', borderRadius: '8px', border: '1px solid var(--border-color)' }}>
             <p style={{ margin: '0 0 0.5rem 0' }}><strong style={{ color: 'var(--text-muted)' }}>Valor a Receber:</strong> R$ {paymentAmount.toLocaleString('pt-BR', {minimumFractionDigits: 2})}</p>
-            <p style={{ margin: '0 0 0.5rem 0' }}><strong style={{ color: 'var(--text-muted)' }}>Método:</strong> {paymentMethod === 'cash' ? 'Dinheiro' : paymentMethod === 'pix' ? 'PIX' : 'Cartão'}</p>
+            <p style={{ margin: '0 0 0.5rem 0' }}><strong style={{ color: 'var(--text-muted)' }}>Métodos:</strong> {Object.keys(splitPayments).join(', ')}</p>
             {selectedCustomer && (
               <p style={{ margin: 0 }}><strong style={{ color: 'var(--text-muted)' }}>Cliente:</strong> {selectedCustomer.name}</p>
             )}

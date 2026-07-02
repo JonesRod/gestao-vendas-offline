@@ -314,8 +314,33 @@ function DashboardReport() {
   const filteredSales = sales.filter(s => filterDate(s.date));
   const filteredPayments = payments.filter(p => filterDate(p.date));
 
-  const salesCash = filteredSales.filter(s => s.paymentMethod === 'cash').reduce((sum, s) => sum + s.totalAmount, 0);
-  const salesCredit = filteredSales.filter(s => s.paymentMethod === 'credit').reduce((sum, s) => sum + s.totalAmount, 0);
+  const getSaleTotals = (sale: any) => {
+    let cash = 0;
+    let credit = 0;
+    
+    if (sale.paymentMethod?.startsWith('[')) {
+      try {
+        const split = JSON.parse(sale.paymentMethod);
+        split.forEach((s: any) => {
+          if (s.method === 'cartao_credito' || s.method === 'fiado' || s.method === 'credit') {
+            credit += s.amount;
+          } else {
+            cash += s.amount;
+          }
+        });
+      } catch(e) {}
+    } else {
+      if (sale.paymentMethod === 'cartao_credito' || sale.paymentMethod === 'fiado' || sale.paymentMethod === 'credit') {
+        credit += sale.totalAmount;
+      } else {
+        cash += sale.totalAmount;
+      }
+    }
+    return { cash, credit };
+  };
+
+  const salesCash = filteredSales.reduce((sum, s) => sum + getSaleTotals(s).cash, 0);
+  const salesCredit = filteredSales.reduce((sum, s) => sum + getSaleTotals(s).credit, 0);
   const totalSales = salesCash + salesCredit;
 
   const totalPaymentsReceived = filteredPayments.reduce((sum, p) => sum + p.amount, 0);
@@ -432,7 +457,19 @@ function SalesReport({ onExportPDF, onExportExcel }: { onExportPDF?: () => void,
                 <td data-label="Data da Venda" style={{ padding: '1rem', display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
                   <Calendar size={14} className="text-muted" /> {new Date(sale.date).toLocaleString()}
                 </td>
-                <td data-label="Método" style={{ padding: '1rem', textTransform: 'capitalize' }}>{sale.paymentMethod === 'cash' ? 'Vista/Din/Pix' : 'Fiado/Cartão'}</td>
+                <td data-label="Método" style={{ padding: '1rem' }}>
+                  {(() => {
+                    if (sale.paymentMethod?.startsWith('[')) {
+                      try {
+                        const arr = JSON.parse(sale.paymentMethod);
+                        return arr.map((a: any) => a.method).join(', ');
+                      } catch(e) { return sale.paymentMethod; }
+                    }
+                    if (sale.paymentMethod === 'cash') return 'Vista/Din/Pix';
+                    if (sale.paymentMethod === 'credit') return 'Fiado/Cartão';
+                    return sale.paymentMethod;
+                  })()}
+                </td>
                 <td data-label="Status Original" style={{ padding: '1rem' }}>
                   {sale.status === 'paid' ? (
                     <span style={{ background: 'rgba(16, 185, 129, 0.1)', color: 'var(--success)', padding: '0.2rem 0.5rem', borderRadius: '4px', fontSize: '0.8rem' }}>Pago</span>
