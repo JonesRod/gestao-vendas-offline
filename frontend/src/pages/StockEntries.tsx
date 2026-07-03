@@ -10,6 +10,8 @@ interface Product {
   cost: number;
   price_cash: number;
   type?: string;
+  description?: string;
+  images?: string[];
 }
 
 interface StockEntryItem {
@@ -19,17 +21,31 @@ interface StockEntryItem {
   unitCost: number;
 }
 
+interface Supplier {
+  id: number;
+  name: string;
+  trade_name?: string;
+}
+
 interface StockEntry {
   id: number;
   date: string;
   totalAmount: number;
   paymentMethod: string;
   supplier: string | null;
+  items?: {
+    quantity: number;
+    unitCost: number;
+    product: {
+      name: string;
+    };
+  }[];
 }
 
 export default function StockEntries() {
   const [products, setProducts] = useState<Product[]>([]);
   const [entries, setEntries] = useState<StockEntry[]>([]);
+  const [suppliers, setSuppliers] = useState<Supplier[]>([]);
   
   // Formulário de nova entrada
   const [items, setItems] = useState<StockEntryItem[]>([]);
@@ -43,10 +59,13 @@ export default function StockEntries() {
   const [activeTab, setActiveTab] = useState<'new' | 'history'>('new');
   const [searchTerm, setSearchTerm] = useState('');
   const [alertMessage, setAlertMessage] = useState<string | null>(null);
+  const [showConfirmModal, setShowConfirmModal] = useState(false);
+  const [selectedEntry, setSelectedEntry] = useState<StockEntry | null>(null);
 
   useEffect(() => {
     fetchProducts();
     fetchEntries();
+    fetchSuppliers();
   }, []);
 
   const fetchProducts = async () => {
@@ -64,6 +83,15 @@ export default function StockEntries() {
       setEntries(response.data);
     } catch (error) {
       console.error('Erro ao buscar histórico:', error);
+    }
+  };
+
+  const fetchSuppliers = async () => {
+    try {
+      const response = await api.get('/suppliers');
+      setSuppliers(response.data);
+    } catch (error) {
+      console.error('Erro ao buscar fornecedores:', error);
     }
   };
 
@@ -112,6 +140,7 @@ export default function StockEntries() {
     }]);
 
     setSelectedProductId('');
+    setSearchTerm('');
     setQuantity(1);
     setUnitCost(0);
   };
@@ -137,6 +166,11 @@ export default function StockEntries() {
       return;
     }
     
+    if (!supplier.trim()) {
+      setAlertMessage('O fornecedor é obrigatório.');
+      return;
+    }
+    
     const methods = Object.keys(splitPayments);
     if (methods.length === 0) {
       setAlertMessage('Selecione pelo menos um método de pagamento.');
@@ -158,6 +192,20 @@ export default function StockEntries() {
       finalPaymentMethodStr = JSON.stringify(splitArr);
     }
 
+    setShowConfirmModal(true);
+  };
+
+  const executeSubmit = async () => {
+    const methods = Object.keys(splitPayments);
+    const sum = methods.reduce((acc, method) => acc + splitPayments[method], 0);
+    let finalPaymentMethodStr = '';
+    if (methods.length === 1 && sum === totalAmount) {
+      finalPaymentMethodStr = methods[0];
+    } else {
+      const splitArr = methods.map(m => ({ method: m, amount: splitPayments[m] })).filter(m => m.amount > 0);
+      finalPaymentMethodStr = JSON.stringify(splitArr);
+    }
+
     setLoading(true);
     try {
       await api.post('/stock-entries', {
@@ -170,20 +218,24 @@ export default function StockEntries() {
       setItems([]);
       setSupplier('');
       setSplitPayments({ dinheiro: 0 });
+      setSearchTerm('');
+      setSelectedProductId('');
+      setQuantity(1);
+      setUnitCost(0);
       fetchProducts(); // Atualiza custos
       fetchEntries();
-      setAlertMessage('Entrada de estoque registrada com sucesso!');
-      setActiveTab('history');
+      setShowConfirmModal(false);
     } catch (error) {
       console.error('Erro ao registrar entrada de estoque:', error);
       setAlertMessage('Ocorreu um erro ao registrar a entrada de estoque.');
+      setShowConfirmModal(false);
     } finally {
       setLoading(false);
     }
   };
 
   const filteredProducts = products.filter(p => 
-    p.name.toLowerCase().includes(searchTerm.toLowerCase()) && p.type !== 'KIT'
+    p.name.toLowerCase().includes(searchTerm.toLowerCase()) && p.type !== 'kit'
   );
 
   return (
@@ -210,8 +262,8 @@ export default function StockEntries() {
         <div className="new-entry-section">
           <div className="add-item-form card">
             <h2>Adicionar Produto</h2>
-            <div className="form-group row align-end">
-              <div className="col flex-2">
+            <div className="form-group row">
+              <div className="col" style={{ flex: 1, position: 'relative' }}>
                 <label>Produto</label>
                 <div className="search-input-wrapper">
                   <Search className="input-icon" size={18} />
@@ -222,17 +274,38 @@ export default function StockEntries() {
                     onChange={(e) => setSearchTerm(e.target.value)}
                   />
                 </div>
-                <select 
-                  value={selectedProductId} 
-                  onChange={(e) => handleProductSelect(e.target.value)}
-                  size={4}
-                  className="product-select"
-                >
-                  {filteredProducts.map(p => (
-                    <option key={p.id} value={p.id}>{p.name} - Preço final: {p.price_cash.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}</option>
-                  ))}
-                </select>
+                {searchTerm.length > 0 && (
+                  <div className="product-search-results">
+                    {filteredProducts.length > 0 ? (
+                      filteredProducts.map(p => (
+                        <div 
+                          key={p.id} 
+                          className={`product-search-item ${selectedProductId === String(p.id) ? 'selected' : ''}`}
+                          onClick={() => handleProductSelect(String(p.id))}
+                        >
+                          <div className="product-search-image">
+                            {p.images && p.images.length > 0 ? (
+                              <img src={p.images[0]} alt={p.name} />
+                            ) : (
+                              <div className="no-image-placeholder"><PackagePlus size={24} /></div>
+                            )}
+                          </div>
+                          <div className="product-search-info">
+                            <span className="product-search-name">{p.name}</span>
+                            {p.description && <span className="product-search-desc">{p.description}</span>}
+                            <span className="product-search-price">Preço final: {p.price_cash.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}</span>
+                          </div>
+                        </div>
+                      ))
+                    ) : (
+                      <div className="product-search-empty">Nenhum produto encontrado.</div>
+                    )}
+                  </div>
+                )}
               </div>
+            </div>
+            
+            <div className="form-group row align-end mt-4">
               <div className="col">
                 <label>Qtd</label>
                 <input 
@@ -296,9 +369,13 @@ export default function StockEntries() {
                       <td>{item.quantity}</td>
                       <td>{item.unitCost.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}</td>
                       <td>{(item.quantity * item.unitCost).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}</td>
-                      <td>
-                        <button className="btn btn-danger btn-icon-small" onClick={() => handleRemoveItem(index)}>
-                          <Trash2 size={16} />
+                      <td style={{ textAlign: 'center' }}>
+                        <button 
+                          onClick={() => handleRemoveItem(index)}
+                          style={{ background: 'transparent', border: 'none', color: 'var(--danger)', cursor: 'pointer', padding: '5px' }}
+                          title="Remover"
+                        >
+                          <Trash2 size={18} />
                         </button>
                       </td>
                     </tr>
@@ -310,17 +387,35 @@ export default function StockEntries() {
 
           <div className="checkout-section card">
             <h2>Finalizar Entrada</h2>
-            <div className="form-group row align-end">
-              <div className="col">
-                <label>Fornecedor (Opcional)</label>
+            <div className="form-group row">
+              <div className="col" style={{ flex: 1 }}>
+                <label>Fornecedor *</label>
                 <input 
                   type="text" 
+                  list="suppliers-list"
                   value={supplier} 
                   onChange={(e) => setSupplier(e.target.value)} 
-                  placeholder="Nome do fornecedor"
+                  placeholder="Buscar fornecedor..."
+                  style={{ width: '100%', padding: '10px', borderRadius: '8px', border: '1px solid var(--border-color)', background: 'var(--bg-panel)', color: 'var(--text-main)' }}
+                  required
                 />
+                <datalist id="suppliers-list">
+                  {suppliers.map(s => (
+                    <option key={s.id} value={s.trade_name ? `${s.name} (${s.trade_name})` : s.name} />
+                  ))}
+                </datalist>
               </div>
-              <div className="col">
+            </div>
+
+            <div className="form-group row mt-4" style={{ justifyContent: 'flex-start' }}>
+              <div className="col total-col" style={{ justifyContent: 'flex-start', flex: 1, padding: '10px', background: 'var(--bg-main)', borderRadius: '8px', border: '1px solid var(--border-color)' }}>
+                <span className="total-label">Total da Compra:</span>
+                <span className="total-value">{totalAmount.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}</span>
+              </div>
+            </div>
+
+            <div className="form-group row mt-4">
+              <div className="col" style={{ flex: 1 }}>
                 <label style={{ marginBottom: '10px' }}>Métodos de Pagamento</label>
                 <div style={{ display: 'flex', flexDirection: 'column', gap: '10px', background: 'var(--bg-main)', padding: '15px', borderRadius: '8px', border: '1px solid var(--border-color)' }}>
                   {[
@@ -358,10 +453,6 @@ export default function StockEntries() {
                     );
                   })}
                 </div>
-              </div>
-              <div className="col total-col">
-                <span className="total-label">Total da Compra:</span>
-                <span className="total-value">{totalAmount.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}</span>
               </div>
             </div>
             <button 
@@ -404,6 +495,7 @@ export default function StockEntries() {
                   <th>Fornecedor</th>
                   <th>Método</th>
                   <th>Total</th>
+                  <th style={{ width: '80px', textAlign: 'center' }}>Ações</th>
                 </tr>
               </thead>
               <tbody>
@@ -414,6 +506,15 @@ export default function StockEntries() {
                     <td>{entry.supplier || '-'}</td>
                     <td>{entry.paymentMethod}</td>
                     <td className="bold">{entry.totalAmount.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}</td>
+                    <td style={{ textAlign: 'center' }}>
+                      <button 
+                        className="btn-icon" 
+                        onClick={() => setSelectedEntry(entry)}
+                        title="Ver detalhes"
+                      >
+                        <Search size={18} />
+                      </button>
+                    </td>
                   </tr>
                 ))}
               </tbody>
@@ -422,11 +523,60 @@ export default function StockEntries() {
         </div>
       )}
 
+      <Modal isOpen={showConfirmModal} onClose={() => setShowConfirmModal(false)} title="Confirmação">
+        <div style={{ textAlign: 'center', padding: '20px' }}>
+          <p style={{ fontSize: '1.1rem', marginBottom: '20px', color: 'var(--text-main)' }}>Deseja realmente confirmar esta entrada de estoque?</p>
+          <div style={{ display: 'flex', gap: '10px', justifyContent: 'center' }}>
+            <button className="btn-secondary" onClick={() => setShowConfirmModal(false)}>Cancelar</button>
+            <button className="btn-primary" onClick={executeSubmit} disabled={loading}>
+              {loading ? 'Confirmando...' : 'Confirmar'}
+            </button>
+          </div>
+        </div>
+      </Modal>
+
       <Modal isOpen={alertMessage !== null} onClose={() => setAlertMessage(null)} title="Aviso">
         <div style={{ padding: '20px', textAlign: 'center' }}>
           <p style={{ fontSize: '1.1rem', marginBottom: '20px', color: 'var(--text-main)' }}>{alertMessage}</p>
-          <button className="btn-primary" style={{ padding: '10px 30px', fontSize: '1rem', borderRadius: '8px' }} onClick={() => setAlertMessage(null)}>OK</button>
+          <button className="btn-primary full-width" onClick={() => setAlertMessage(null)}>OK</button>
         </div>
+      </Modal>
+
+      <Modal isOpen={selectedEntry !== null} onClose={() => setSelectedEntry(null)} title={`Detalhes da Entrada #${selectedEntry?.id}`}>
+        {selectedEntry && (
+          <div style={{ padding: '10px' }}>
+            <div style={{ marginBottom: '20px', display: 'flex', flexDirection: 'column', gap: '5px', color: 'var(--text-muted)' }}>
+              <p><strong>Data:</strong> {new Date(selectedEntry.date).toLocaleString()}</p>
+              <p><strong>Fornecedor:</strong> {selectedEntry.supplier || 'Não informado'}</p>
+              <p><strong>Total:</strong> {selectedEntry.totalAmount.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}</p>
+              <p><strong>Método de Pagamento:</strong> {selectedEntry.paymentMethod}</p>
+            </div>
+            
+            <h4 style={{ marginBottom: '10px', color: 'var(--text-main)', borderBottom: '1px solid var(--border-color)', paddingBottom: '5px' }}>Itens da Compra</h4>
+            <div style={{ maxHeight: '300px', overflowY: 'auto' }}>
+              <table className="data-table">
+                <thead>
+                  <tr>
+                    <th>Produto</th>
+                    <th>Qtd</th>
+                    <th>Custo Unit.</th>
+                    <th>Subtotal</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {selectedEntry.items?.map((item, idx) => (
+                    <tr key={idx}>
+                      <td>{item.product?.name || 'Desconhecido'}</td>
+                      <td>{item.quantity}</td>
+                      <td>{item.unitCost.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}</td>
+                      <td>{(item.quantity * item.unitCost).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          </div>
+        )}
       </Modal>
     </div>
   );

@@ -11,6 +11,7 @@ import Reports from './pages/Reports';
 import Login from './pages/Login';
 import StockEntries from './pages/StockEntries';
 import Finances from './pages/Finances';
+import Suppliers from './pages/Suppliers';
 import { AuthProvider } from './contexts/AuthContext';
 import ProtectedRoute from './components/ProtectedRoute';
 import './App.css';
@@ -46,6 +47,7 @@ function App() {
             <Route path="inventory" element={<Inventory />} />
             <Route path="stock-entries" element={<StockEntries />} />
             <Route path="finances" element={<Finances />} />
+            <Route path="suppliers" element={<Suppliers />} />
             <Route path="funcionarios" element={<Employees />} />
             <Route path="reports" element={<Reports />} />
             <Route path="settings" element={<Settings />} />

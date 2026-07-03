@@ -329,6 +329,31 @@ app.post('/api/employees', async (req, res) => {
   res.json(employee);
 });
 
+// Routes for Suppliers
+app.get('/api/suppliers', async (req, res) => {
+  const suppliers = await prisma.supplier.findMany();
+  res.json(suppliers);
+});
+
+app.post('/api/suppliers', async (req, res) => {
+  const data = req.body;
+  const supplier = await prisma.supplier.create({ data });
+  res.json(supplier);
+});
+
+app.put('/api/suppliers/:id', async (req, res) => {
+  const { id } = req.params;
+  const data = req.body;
+  const supplier = await prisma.supplier.update({ where: { id: Number(id) }, data });
+  res.json(supplier);
+});
+
+app.delete('/api/suppliers/:id', async (req, res) => {
+  const { id } = req.params;
+  const supplier = await prisma.supplier.delete({ where: { id: Number(id) } });
+  res.json(supplier);
+});
+
 // Auth Route
 app.post('/api/auth/login', async (req, res) => {
   const { password } = req.body;

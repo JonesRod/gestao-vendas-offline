@@ -218,3 +218,21 @@ model Expense {
   category      String?
   paymentMethod String
 }
+
+model Supplier {
+  id           Int      @id @default(autoincrement())
+  name         String
+  trade_name   String?
+  cnpj_cpf     String?
+  email        String?
+  phone        String?
+  cep          String?
+  street       String?
+  number       String?
+  neighborhood String?
+  city         String?
+  state        String?
+  observation  String?
+  is_active    Boolean  @default(true)
+  created_at   DateTime @default(now())
+}
