@@ -268,7 +268,11 @@ export default function Finances() {
                         - {exp.amount.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}
                       </td>
                       <td>
-                        <button className="btn btn-danger btn-icon-small" onClick={() => handleDelete(exp.id)} title="Excluir">
+                        <button 
+                          onClick={() => handleDelete(exp.id)} 
+                          title="Excluir"
+                          style={{ background: 'transparent', border: 'none', color: 'var(--danger)', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' }}
+                        >
                           <Trash2 size={16} />
                         </button>
                       </td>
