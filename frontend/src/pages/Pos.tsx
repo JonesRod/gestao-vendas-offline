@@ -511,10 +511,7 @@ Obrigado pela preferência!`;
           <div className="cart-table-container">
             <div className="payment-method-selector-horizontal" style={{ flexWrap: 'wrap' }}>
               {[
-                { id: 'dinheiro', label: 'Dinheiro' },
-                { id: 'pix', label: 'PIX' },
-                { id: 'cartao_debito', label: 'Cartão Débito' },
-                { id: 'cartao_credito', label: 'Cartão Crédito' },
+                { id: 'dinheiro', label: 'À Vista' },
                 { id: 'fiado', label: 'Fiado/Prazo' }
               ].map(opt => {
                 const isChecked = splitPayments[opt.id] !== undefined;
@@ -522,24 +519,14 @@ Obrigado pela preferência!`;
                   <div key={opt.id} style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-start', gap: '5px', padding: '5px 10px', background: isChecked ? 'rgba(99, 102, 241, 0.1)' : 'transparent', borderRadius: '4px', border: isChecked ? '1px solid var(--primary)' : '1px solid transparent' }}>
                     <label style={{ display: 'flex', alignItems: 'center', gap: '5px', cursor: 'pointer', margin: 0, fontSize: '0.9rem' }}>
                       <input 
-                        type="checkbox" 
+                        type="radio" 
+                        name="paymentMethod"
                         checked={isChecked}
-                        onChange={() => togglePaymentMethod(opt.id)}
+                        onChange={() => setSplitPayments({ [opt.id]: currentTotal })}
                         style={{ cursor: 'pointer' }}
                       />
                       <span style={{ fontWeight: isChecked ? 600 : 400 }}>{opt.label}</span>
                     </label>
-                    {isChecked && (
-                      <div style={{ display: 'flex', alignItems: 'center', gap: '5px', width: '100%', paddingLeft: '18px' }}>
-                        <span style={{ color: 'var(--text-muted)', fontSize: '0.8rem' }}>R$</span>
-                        <input 
-                          type="text"
-                          value={splitPayments[opt.id].toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
-                          onChange={e => handleSplitChange(opt.id, e.target.value)}
-                          style={{ width: '100%', maxWidth: '100px', padding: '4px', borderRadius: '4px', border: '1px solid var(--border-color)', background: 'var(--bg-panel)', color: 'var(--text-main)', fontSize: '0.85rem' }}
-                        />
-                      </div>
-                    )}
                   </div>
                 );
               })}
