@@ -13,8 +13,21 @@ interface Expense {
   paymentMethod: string;
 }
 
+interface Sale {
+  id: number;
+  totalAmount: number;
+  paymentMethod: string;
+}
+
+interface Payment {
+  id: number;
+  amount: number;
+}
+
 export default function Finances() {
   const [expenses, setExpenses] = useState<Expense[]>([]);
+  const [sales, setSales] = useState<Sale[]>([]);
+  const [payments, setPayments] = useState<Payment[]>([]);
   const [loading, setLoading] = useState(false);
   
   // Novo formulário
@@ -32,18 +45,24 @@ export default function Finances() {
 
   const [splitPayments, setSplitPayments] = useState<Record<string, number>>({ dinheiro: 0 });
 
-  useEffect(() => {
-    fetchExpenses();
-  }, []);
-
-  const fetchExpenses = async () => {
+  const fetchData = async () => {
     try {
-      const response = await api.get('/expenses');
-      setExpenses(response.data);
+      const [expensesRes, salesRes, paymentsRes] = await Promise.all([
+        api.get('/expenses'),
+        api.get('/sales'),
+        api.get('/payments')
+      ]);
+      setExpenses(expensesRes.data);
+      setSales(salesRes.data);
+      setPayments(paymentsRes.data);
     } catch (error) {
-      console.error('Erro ao buscar finanças:', error);
+      console.error('Erro ao buscar dados financeiros:', error);
     }
   };
+
+  useEffect(() => {
+    fetchData();
+  }, []);
 
   const handleSplitChange = (method: string, valueStr: string) => {
     const value = valueStr.replace(/\D/g, '');
@@ -108,7 +127,7 @@ export default function Finances() {
       setAmount(0);
       setCategory('');
       setSplitPayments({ dinheiro: 0 });
-      fetchExpenses();
+      fetchData();
     } catch (error) {
       console.error('Erro ao registrar:', error);
       alert('Erro ao registrar finança.');
@@ -121,7 +140,7 @@ export default function Finances() {
     if (!confirm('Deseja realmente excluir este registro?')) return;
     try {
       await api.delete(`/expenses/${id}`);
-      fetchExpenses();
+      fetchData();
     } catch (error) {
       console.error('Erro ao excluir:', error);
     }
@@ -131,13 +150,46 @@ export default function Finances() {
     .filter(e => e.type === 'EXPENSE' || e.type === 'STOCK_PURCHASE' || e.type === 'COST')
     .reduce((acc, curr) => acc + curr.amount, 0);
 
+  let totalEntradas = 0;
+  
+  payments.forEach(p => {
+    totalEntradas += p.amount;
+  });
+
+  sales.forEach(s => {
+    try {
+      const parsed = JSON.parse(s.paymentMethod);
+      if (Array.isArray(parsed)) {
+        parsed.forEach(m => {
+          if (m.method !== 'fiado') totalEntradas += m.amount;
+        });
+      }
+    } catch {
+      if (s.paymentMethod !== 'fiado') {
+        totalEntradas += s.totalAmount;
+      }
+    }
+  });
+
+  const saldo = totalEntradas - totalGastos;
+
   return (
     <div className="finances-container">
       <header className="page-header">
         <h1>Finanças e Despesas</h1>
       </header>
 
-      <div className="dashboard-cards">
+      <div className="dashboard-cards" style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(250px, 1fr))', gap: '20px' }}>
+        <div className="summary-card success">
+          <div className="summary-icon">
+            <TrendingUp size={24} />
+          </div>
+          <div className="summary-info">
+            <span className="summary-title">Total de Entradas</span>
+            <span className="summary-value">{totalEntradas.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}</span>
+          </div>
+        </div>
+
         <div className="summary-card danger">
           <div className="summary-icon">
             <TrendingDown size={24} />
@@ -145,6 +197,16 @@ export default function Finances() {
           <div className="summary-info">
             <span className="summary-title">Total de Gastos/Custos</span>
             <span className="summary-value">{totalGastos.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}</span>
+          </div>
+        </div>
+
+        <div className={`summary-card ${saldo >= 0 ? 'success' : 'danger'}`}>
+          <div className="summary-icon">
+            <DollarSign size={24} />
+          </div>
+          <div className="summary-info">
+            <span className="summary-title">Saldo Atual</span>
+            <span className="summary-value">{saldo.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}</span>
           </div>
         </div>
       </div>

@@ -487,38 +487,40 @@ export default function StockEntries() {
           {entries.length === 0 ? (
             <p>Nenhuma entrada registrada.</p>
           ) : (
-            <table className="data-table">
-              <thead>
-                <tr>
-                  <th>ID</th>
-                  <th>Data</th>
-                  <th>Fornecedor</th>
-                  <th>Método</th>
-                  <th>Total</th>
-                  <th style={{ width: '80px', textAlign: 'center' }}>Ações</th>
-                </tr>
-              </thead>
-              <tbody>
-                {entries.map(entry => (
-                  <tr key={entry.id}>
-                    <td>#{entry.id}</td>
-                    <td>{new Date(entry.date).toLocaleString()}</td>
-                    <td>{entry.supplier || '-'}</td>
-                    <td>{entry.paymentMethod}</td>
-                    <td className="bold">{entry.totalAmount.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}</td>
-                    <td style={{ textAlign: 'center' }}>
-                      <button 
-                        className="btn-icon" 
-                        onClick={() => setSelectedEntry(entry)}
-                        title="Ver detalhes"
-                      >
-                        <Search size={18} />
-                      </button>
-                    </td>
+            <div style={{ overflowX: 'auto', width: '100%' }}>
+              <table className="data-table">
+                <thead>
+                  <tr>
+                    <th>ID</th>
+                    <th>Data</th>
+                    <th>Fornecedor</th>
+                    <th>Método</th>
+                    <th>Total</th>
+                    <th style={{ width: '80px', textAlign: 'center' }}>Ações</th>
                   </tr>
-                ))}
-              </tbody>
-            </table>
+                </thead>
+                <tbody>
+                  {entries.map(entry => (
+                    <tr key={entry.id}>
+                      <td>#{entry.id}</td>
+                      <td>{new Date(entry.date).toLocaleString()}</td>
+                      <td>{entry.supplier || '-'}</td>
+                      <td>{entry.paymentMethod}</td>
+                      <td className="bold">{entry.totalAmount.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}</td>
+                      <td style={{ textAlign: 'center' }}>
+                        <button 
+                          className="btn-icon" 
+                          onClick={() => setSelectedEntry(entry)}
+                          title="Ver detalhes"
+                        >
+                          <Search size={18} />
+                        </button>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
           )}
         </div>
       )}

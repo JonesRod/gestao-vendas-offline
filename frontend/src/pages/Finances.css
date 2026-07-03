@@ -63,6 +63,9 @@
   grid-template-columns: 1fr 2fr;
   gap: 20px;
 }
+.content-grid > div {
+  min-width: 0;
+}
 
 @media (max-width: 900px) {
   .content-grid {
