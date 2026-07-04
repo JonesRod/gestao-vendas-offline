@@ -1,9 +1,10 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { Search, Plus, UserCircle, Edit, ShieldCheck, ShieldAlert, Trash2 } from 'lucide-react';
 import { useLiveQuery } from 'dexie-react-hooks';
 import { db, type Employee } from '../db/db';
 import Modal from '../components/Modal';
 import { maskCPF, maskPhone, maskCEP, maskDate, fetchAddressByCep } from '../utils/masks';
+import { api } from '../services/api';
 import './Employees.css';
 
 export default function Employees() {
@@ -27,6 +28,11 @@ export default function Employees() {
 
   const handleDelete = async (id: number) => {
     if (confirm('Tem certeza que deseja excluir este funcionário?')) {
+      try {
+        await api.delete(`/employees/${id}`);
+      } catch (err) {
+        console.error("Erro ao deletar da API", err);
+      }
       await db.employees.delete(id);
     }
   };
@@ -66,9 +72,21 @@ export default function Employees() {
     };
 
     if (formData.id) {
+      try {
+        await api.put(`/employees/${formData.id}`, employeeData);
+      } catch (err) {
+        console.error("Erro ao sincronizar update na API", err);
+      }
       await db.employees.update(formData.id, employeeData);
     } else {
-      await db.employees.add({ ...employeeData, created_at: new Date() } as Employee);
+      let insertedId = null;
+      try {
+        const res = await api.post('/employees', employeeData);
+        if (res.data && res.data.id) insertedId = res.data.id;
+      } catch (err) {
+        console.error("Erro ao sincronizar insert na API", err);
+      }
+      await db.employees.add({ ...employeeData, id: insertedId || undefined, created_at: new Date() } as Employee);
     }
     
     setIsModalOpen(false);
@@ -172,8 +190,9 @@ export default function Employees() {
             <div className="form-group">
               <label>Cargo</label>
               <select value={formData.role} onChange={e => setFormData({...formData, role: e.target.value})}>
-                <option value="Vendedor" style={{ background: 'var(--bg-panel)' }}>Vendedor</option>
+                <option value="ADMIN" style={{ background: 'var(--bg-panel)' }}>Administrador</option>
                 <option value="Gerente" style={{ background: 'var(--bg-panel)' }}>Gerente</option>
+                <option value="Vendedor" style={{ background: 'var(--bg-panel)' }}>Vendedor</option>
                 <option value="Entregador" style={{ background: 'var(--bg-panel)' }}>Entregador</option>
               </select>
             </div>

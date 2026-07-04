@@ -1,6 +1,8 @@
 import express from 'express';
 import cors from 'cors';
 import { PrismaClient } from '@prisma/client';
+import bcrypt from 'bcrypt';
+import jwt from 'jsonwebtoken';
 
 const prisma = new PrismaClient();
 const app = express();
@@ -325,7 +327,57 @@ app.get('/api/employees', async (req, res) => {
 });
 
 app.post('/api/employees', async (req, res) => {
-  const employee = await prisma.employee.create({ data: req.body });
+  const data = req.body;
+  // Extrair o address para campos flat, se existir
+  const flatData = { ...data };
+  if (data.address) {
+    flatData.cep = data.address.cep;
+    flatData.street = data.address.street;
+    flatData.number = data.address.number;
+    flatData.neighborhood = data.address.neighborhood;
+    flatData.city = data.address.city;
+    flatData.state = data.address.state;
+    flatData.observation = data.address.observation;
+    delete flatData.address;
+  }
+  const employee = await prisma.employee.create({ data: flatData });
+  res.json(employee);
+});
+
+app.put('/api/employees/:id', async (req, res) => {
+  const { id } = req.params;
+  const data = req.body;
+  
+  const flatData = { ...data };
+  if (data.address) {
+    flatData.cep = data.address.cep;
+    flatData.street = data.address.street;
+    flatData.number = data.address.number;
+    flatData.neighborhood = data.address.neighborhood;
+    flatData.city = data.address.city;
+    flatData.state = data.address.state;
+    flatData.observation = data.address.observation;
+    delete flatData.address;
+  }
+  
+  try {
+    const employee = await prisma.employee.update({
+      where: { id: Number(id) },
+      data: flatData,
+    });
+    res.json(employee);
+  } catch (error) {
+    console.log(`[EMPLOYEE UPDATE] Record not found, creating with id ${id}`);
+    const employee = await prisma.employee.create({
+      data: { ...flatData, id: Number(id) },
+    });
+    res.json(employee);
+  }
+});
+
+app.delete('/api/employees/:id', async (req, res) => {
+  const { id } = req.params;
+  const employee = await prisma.employee.delete({ where: { id: Number(id) } });
   res.json(employee);
 });
 
@@ -354,14 +406,103 @@ app.delete('/api/suppliers/:id', async (req, res) => {
   res.json(supplier);
 });
 
+const JWT_SECRET = process.env.JWT_SECRET || 'secret_key_for_jwt_offline';
+
+// Rota auxiliar para verificar perfis de um CPF
+app.post('/api/auth/check-cpf', async (req, res) => {
+  const { cpf } = req.body;
+  if (!cpf) return res.status(400).json({ error: 'CPF obrigatório' });
+
+  const cleanCpf = cpf.replace(/\D/g, '');
+  const roles = [];
+
+  const employee = await prisma.employee.findFirst({ where: { cpf: { contains: cleanCpf } } });
+  if (employee) {
+    roles.push(employee.role === 'ADMIN' ? 'ADMIN' : 'EMPLOYEE');
+  } else if (cleanCpf === '02346827100') {
+    // Master admin de fallback se não houver funcionário
+    roles.push('ADMIN');
+  }
+
+  const customer = await prisma.customer.findFirst({ where: { cpf: { contains: cleanCpf } } });
+  if (customer) {
+    roles.push('CUSTOMER');
+  }
+
+  res.json({ roles });
+});
+
 // Auth Route
 app.post('/api/auth/login', async (req, res) => {
-  const { password } = req.body;
-  if (password === 'admin') {
-    res.json({ token: 'fake-jwt-token-admin' });
-  } else {
-    res.status(401).json({ error: 'Senha incorreta' });
+  const { cpf, password, role } = req.body;
+  const cleanCpf = cpf?.replace(/\D/g, '');
+  const cleanPassword = password?.trim();
+
+  console.log(`[LOGIN ATTEMPT] CPF: ${cleanCpf}, Role: ${role}, PasswordLength: ${cleanPassword?.length}`);
+
+  if (cleanCpf === '02346827100' && cleanPassword === '123456' && role === 'ADMIN') {
+    const token = jwt.sign({ id: 0, role: 'ADMIN' }, JWT_SECRET, { expiresIn: '7d' });
+    return res.json({ token, role: 'ADMIN', user: { name: 'Master Admin' } });
   }
+
+  let user = null;
+  let userRole = role;
+
+  if (role === 'ADMIN' || role === 'EMPLOYEE') {
+    user = await prisma.employee.findFirst({ where: { cpf: { contains: cleanCpf } } });
+    if (user) {
+      userRole = user.role === 'ADMIN' ? 'ADMIN' : 'EMPLOYEE';
+    }
+  } else if (role === 'CUSTOMER') {
+    user = await prisma.customer.findFirst({ where: { cpf: { contains: cleanCpf } } });
+  }
+
+  if (!user) {
+    return res.status(401).json({ error: 'Usuário não encontrado' });
+  }
+
+  // Se o usuário não tiver senha configurada, usa os 4 primeiros dígitos do CPF
+  let validPassword = false;
+  if (!user.password) {
+    validPassword = cleanPassword === cleanCpf.substring(0, 4);
+  } else {
+    validPassword = await bcrypt.compare(cleanPassword, user.password);
+  }
+
+  if (!validPassword) {
+    return res.status(401).json({ error: 'Senha incorreta' });
+  }
+
+  const token = jwt.sign({ id: user.id, role: userRole }, JWT_SECRET, { expiresIn: '7d' });
+  res.json({ token, role: userRole, user });
+});
+
+// Recuperação de senha simulada
+app.post('/api/auth/forgot-password', async (req, res) => {
+  const { cpf, method } = req.body;
+  // Apenas simulação por enquanto
+  console.log(`[SIMULAÇÃO] Recuperação de senha solicitada para ${cpf} via ${method}`);
+  console.log(`Link para resetar (apenas exemplo): http://localhost:5173/reset-password?token=12345&cpf=${cpf}`);
+  res.json({ success: true, message: `Instruções enviadas via ${method}` });
+});
+
+app.post('/api/auth/reset-password', async (req, res) => {
+  const { cpf, token, newPassword } = req.body;
+  const cleanCpf = cpf.replace(/\D/g, '');
+  
+  const hashedPassword = await bcrypt.hash(newPassword, 10);
+  
+  const employee = await prisma.employee.findFirst({ where: { cpf: { contains: cleanCpf } } });
+  if (employee) {
+    await prisma.employee.update({ where: { id: employee.id }, data: { password: hashedPassword } });
+  }
+  
+  const customer = await prisma.customer.findFirst({ where: { cpf: { contains: cleanCpf } } });
+  if (customer) {
+    await prisma.customer.update({ where: { id: customer.id }, data: { password: hashedPassword } });
+  }
+
+  res.json({ success: true });
 });
 
 const PORT = process.env.PORT || 3000;

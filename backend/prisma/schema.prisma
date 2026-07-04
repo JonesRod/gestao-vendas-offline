@@ -8,7 +8,7 @@ generator client {
 }
 
 model Customer {
-  id           Int      @id @default(autoincrement())
+  id           Int     @id @default(autoincrement())
   name         String
   cpf          String?
   email        String?
@@ -16,11 +16,11 @@ model Customer {
   phone        String
   credit_limit Float
   credit_used  Float
-  is_blocked   Boolean  @default(false)
-  is_loyal     Boolean  @default(false)
+  is_blocked   Boolean @default(false)
+  is_loyal     Boolean @default(false)
   due_date     Int
   status       String?
-  
+
   cep          String?
   street       String?
   number       String?
@@ -31,25 +31,30 @@ model Customer {
   lat          Float?
   lng          Float?
 
-  created_at   DateTime @default(now())
+  password      String?
+  reset_token   String?
+  reset_expires DateTime?
+
+  created_at DateTime @default(now())
 
   sales        Sale[]
   installments Installment[]
   payments     Payment[]
+  onlineOrders OnlineOrder[]
 }
 
 model Product {
-  id               Int      @id @default(autoincrement())
-  name             String
-  description      String?
-  cost             Float?
-  margin_cash      Float?
-  margin_credit    Float?
-  price_cash       Float
-  price_credit     Float
-  stock            Int
-  is_active        Boolean  @default(true)
-  images           String?
+  id                           Int      @id @default(autoincrement())
+  name                         String
+  description                  String?
+  cost                         Float?
+  margin_cash                  Float?
+  margin_credit                Float?
+  price_cash                   Float
+  price_credit                 Float
+  stock                        Int
+  is_active                    Boolean  @default(true)
+  images                       String?
   type                         String
   allow_credit                 Boolean?
   max_installments             Int?
@@ -59,85 +64,85 @@ model Product {
   loyalty_discount_active      Boolean? @default(false)
   loyalty_discount_percent     Float?   @default(0)
   loyalty_discount_value       Float?   @default(0)
-  created_at       DateTime @default(now())
+  created_at                   DateTime @default(now())
 
-  saleItems        SaleItem[]
-  kitItemsParent   KitItem[]  @relation("ParentProduct")
-  kitItemsChild    KitItem[]  @relation("ChildProduct")
-  stockEntryItems  StockEntryItem[]
+  saleItems       SaleItem[]
+  kitItemsParent  KitItem[]        @relation("ParentProduct")
+  kitItemsChild   KitItem[]        @relation("ChildProduct")
+  stockEntryItems StockEntryItem[]
 }
 
 model KitItem {
-  id               Int      @id @default(autoincrement())
-  parentProductId  Int
-  childProductId   Int
-  quantity         Int
+  id              Int @id @default(autoincrement())
+  parentProductId Int
+  childProductId  Int
+  quantity        Int
 
-  parentProduct    Product  @relation("ParentProduct", fields: [parentProductId], references: [id])
-  childProduct     Product  @relation("ChildProduct", fields: [childProductId], references: [id])
+  parentProduct Product @relation("ParentProduct", fields: [parentProductId], references: [id])
+  childProduct  Product @relation("ChildProduct", fields: [childProductId], references: [id])
 }
 
 model Sale {
-  id            Int      @id @default(autoincrement())
-  customerId    Int?
-  totalAmount   Float
-  paymentMethod String
-  status        String
-  date          DateTime
-  due_date      DateTime?
+  id             Int       @id @default(autoincrement())
+  customerId     Int?
+  totalAmount    Float
+  paymentMethod  String
+  status         String
+  date           DateTime
+  due_date       DateTime?
   invoice_number String?
 
-  customer      Customer? @relation(fields: [customerId], references: [id])
-  items         SaleItem[]
-  installments  Installment[]
+  customer     Customer?     @relation(fields: [customerId], references: [id])
+  items        SaleItem[]
+  installments Installment[]
 }
 
 model SaleItem {
-  id            Int      @id @default(autoincrement())
+  id            Int   @id @default(autoincrement())
   saleId        Int
   productId     Int
   quantity      Int
   price_applied Float
 
-  sale          Sale     @relation(fields: [saleId], references: [id])
-  product       Product  @relation(fields: [productId], references: [id])
+  sale    Sale    @relation(fields: [saleId], references: [id])
+  product Product @relation(fields: [productId], references: [id])
 }
 
 model Installment {
-  id           Int      @id @default(autoincrement())
-  saleId       Int
-  customerId   Int
-  amount       Float
-  due_date     DateTime
-  status       String
-  number       Int
-  total        Int
-  productName  String
+  id          Int      @id @default(autoincrement())
+  saleId      Int
+  customerId  Int
+  amount      Float
+  due_date    DateTime
+  status      String
+  number      Int
+  total       Int
+  productName String
 
-  customer     Customer @relation(fields: [customerId], references: [id])
-  sale         Sale     @relation(fields: [saleId], references: [id])
+  customer Customer @relation(fields: [customerId], references: [id])
+  sale     Sale     @relation(fields: [saleId], references: [id])
 }
 
 model Payment {
-  id           Int      @id @default(autoincrement())
-  customerId   Int
-  amount       Float
-  method       String
-  date         DateTime
+  id         Int      @id @default(autoincrement())
+  customerId Int
+  amount     Float
+  method     String
+  date       DateTime
 
-  customer     Customer @relation(fields: [customerId], references: [id])
+  customer Customer @relation(fields: [customerId], references: [id])
 }
 
 model Employee {
-  id           Int      @id @default(autoincrement())
-  name         String
-  cpf          String?
-  email        String?
-  birth_date   String?
-  role         String
-  phone        String
-  is_active    Boolean  @default(true)
-  
+  id         Int     @id @default(autoincrement())
+  name       String
+  cpf        String?
+  email      String?
+  birth_date String?
+  role       String
+  phone      String
+  is_active  Boolean @default(true)
+
   cep          String?
   street       String?
   number       String?
@@ -146,45 +151,49 @@ model Employee {
   state        String?
   observation  String?
 
-  created_at   DateTime @default(now())
+  password      String?
+  reset_token   String?
+  reset_expires DateTime?
+
+  created_at DateTime @default(now())
 }
 
 model Settings {
-  id                           Int      @id @default(autoincrement())
-  email                        String
-  phone                        String
-  
-  cep                          String?
-  street                       String?
-  number                       String?
-  neighborhood                 String?
-  city                         String?
-  state                        String?
-  observation                  String?
+  id    Int    @id @default(autoincrement())
+  email String
+  phone String
 
-  tradeName                    String
-  companyName                  String
-  cnpj                         String
-  ownerBirthDate               String
+  cep          String?
+  street       String?
+  number       String?
+  neighborhood String?
+  city         String?
+  state        String?
+  observation  String?
 
-  loyalty_active               Boolean
-  loyalty_days                 Int
+  tradeName      String
+  companyName    String
+  cnpj           String
+  ownerBirthDate String
 
-  penalty_active               Boolean
-  penalty_percent              Float
-  interest_percent             Float
+  loyalty_active Boolean
+  loyalty_days   Int
 
-  whatsapp_token               String?
-  whatsapp_instance            String?
-  email_token                  String?
-  email_sender                 String?
+  penalty_active   Boolean
+  penalty_percent  Float
+  interest_percent Float
 
-  online_payment_active        Boolean  @default(false)
-  payment_gateway              String?
-  payment_api_key              String?
-  payment_webhook_secret       String?
+  whatsapp_token    String?
+  whatsapp_instance String?
+  email_token       String?
+  email_sender      String?
 
-  updated_at                   DateTime?
+  online_payment_active  Boolean @default(false)
+  payment_gateway        String?
+  payment_api_key        String?
+  payment_webhook_secret String?
+
+  updated_at DateTime?
 }
 
 model StockEntry {
@@ -194,19 +203,19 @@ model StockEntry {
   paymentMethod String
   supplier      String?
   notes         String?
-  
-  items         StockEntryItem[]
+
+  items StockEntryItem[]
 }
 
 model StockEntryItem {
-  id           Int      @id @default(autoincrement())
+  id           Int   @id @default(autoincrement())
   stockEntryId Int
   productId    Int
   quantity     Int
   unitCost     Float
 
-  stockEntry   StockEntry @relation(fields: [stockEntryId], references: [id])
-  product      Product    @relation(fields: [productId], references: [id])
+  stockEntry StockEntry @relation(fields: [stockEntryId], references: [id])
+  product    Product    @relation(fields: [productId], references: [id])
 }
 
 model Expense {
@@ -214,7 +223,7 @@ model Expense {
   date          DateTime @default(now())
   description   String
   amount        Float
-  type          String   // 'EXPENSE' ou 'COST' ou 'STOCK_PURCHASE'
+  type          String // 'EXPENSE' ou 'COST' ou 'STOCK_PURCHASE'
   category      String?
   paymentMethod String
 }
@@ -235,4 +244,16 @@ model Supplier {
   observation  String?
   is_active    Boolean  @default(true)
   created_at   DateTime @default(now())
+}
+
+model OnlineOrder {
+  id            Int      @id @default(autoincrement())
+  customerId    Int
+  totalAmount   Float
+  status        String   @default("PENDING") // PENDING, APPROVED, REJECTED, COMPLETED
+  paymentMethod String
+  date          DateTime @default(now())
+  items         String // JSON string of items
+
+  customer Customer @relation(fields: [customerId], references: [id])
 }
