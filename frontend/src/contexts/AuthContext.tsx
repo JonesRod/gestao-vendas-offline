@@ -5,7 +5,7 @@ interface AuthContextType {
   isAuthenticated: boolean;
   role: string | null;
   user: any | null;
-  login: (cpf: string, password: string, role: string) => Promise<boolean>;
+  login: (cpf: string, password: string, role?: string) => Promise<{ success: boolean; requireRoleSelection?: boolean; availableRoles?: string[]; role?: string; error?: string }>;
   logout: () => void;
 }
 
@@ -25,26 +25,31 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     return u ? JSON.parse(u) : null;
   });
 
-  const login = async (cpf: string, password: string, selectedRole: string) => {
+  const login = async (cpf: string, password: string, role?: string) => {
     try {
-      const response = await api.post('/auth/login', { cpf, password, role: selectedRole });
+      const response = await api.post('/auth/login', { cpf, password, role });
       
-      if (response.data.token) {
-        setIsAuthenticated(true);
-        setRole(response.data.role);
-        setUser(response.data.user);
-        
-        localStorage.setItem('@GestaoOffline:token', response.data.token);
-        localStorage.setItem('@GestaoOffline:role', response.data.role);
-        if (response.data.user) {
-          localStorage.setItem('@GestaoOffline:user', JSON.stringify(response.data.user));
-        }
-        return true;
+      if (response.data.requireRoleSelection) {
+        return { success: true, requireRoleSelection: true, availableRoles: response.data.availableRoles };
       }
-      return false;
+
+      const { token, role: userRole, user: userData } = response.data;
+      
+      localStorage.setItem('@GestaoOffline:token', token);
+      localStorage.setItem('@GestaoOffline:role', userRole);
+      
+      if (userData) {
+        localStorage.setItem('@GestaoOffline:user', JSON.stringify(userData));
+      }
+
+      setRole(userRole);
+      setUser(userData);
+      setIsAuthenticated(true);
+      
+      return { success: true, role: userRole };
     } catch (error) {
       console.error("Login failed", error);
-      return false;
+      return { success: false };
     }
   };
 

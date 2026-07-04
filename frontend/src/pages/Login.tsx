@@ -36,6 +36,7 @@ export default function Login() {
     setCpf(value);
   };
 
+  // Quando submete o CPF, vamos direto para a senha
   const handleCpfSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (cpf.replace(/\D/g, '').length < 11) {
@@ -43,33 +44,30 @@ export default function Login() {
       return;
     }
     setError('');
-    setLoading(true);
-
-    try {
-      const response = await api.post('/auth/check-cpf', { cpf });
-      const availableRoles = response.data.roles;
-      
-      if (availableRoles.length === 0) {
-        setError('Usuário não encontrado.');
-      } else if (availableRoles.length === 1) {
-        setSelectedRole(availableRoles[0]);
-        setStep('PASSWORD');
-      } else {
-        setRoles(availableRoles);
-        setStep('ROLE');
-      }
-    } catch (err) {
-      setError('Erro ao verificar CPF.');
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  const handleRoleSelect = (role: string) => {
-    setSelectedRole(role);
     setStep('PASSWORD');
   };
 
+  // Quando escolhe o perfil (se tiver mais de um)
+  const handleRoleSelect = async (role: string) => {
+    setSelectedRole(role);
+    setError('');
+    setLoading(true);
+    
+    const result = await login(cpf, password, role);
+    setLoading(false);
+    
+    if (result && result.success) {
+      if (result.role === 'CUSTOMER') {
+        navigate('/loja', { replace: true });
+      } else {
+        navigate('/dashboard', { replace: true });
+      }
+    } else {
+      setError('Erro ao logar com o perfil selecionado.');
+    }
+  };
+
+  // Quando envia a senha
   const handleLoginSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!password) {
@@ -79,14 +77,20 @@ export default function Login() {
     setError('');
     setLoading(true);
 
-    const success = await login(cpf, password, selectedRole);
+    const result = await login(cpf, password);
     setLoading(false);
     
-    if (success) {
-      if (selectedRole === 'CUSTOMER') {
-        navigate('/loja', { replace: true });
+    if (result && result.success) {
+      if (result.requireRoleSelection) {
+        setRoles(result.availableRoles);
+        setStep('ROLE'); // Vai para a tela de escolher o perfil
       } else {
-        navigate('/dashboard', { replace: true });
+        // Logado direto (só tinha 1 perfil)
+        if (result.role === 'CUSTOMER') {
+          navigate('/loja', { replace: true });
+        } else {
+          navigate('/dashboard', { replace: true });
+        }
       }
     } else {
       setError('Senha incorreta ou erro de conexão.');
@@ -163,7 +167,7 @@ export default function Login() {
         {step === 'PASSWORD' && (
           <form className="login-form" onSubmit={handleLoginSubmit}>
             <div style={{ textAlign: 'center', marginBottom: '1.5rem' }}>
-              <p style={{ color: 'var(--text-muted)', fontSize: '0.9rem' }}>Acessando como <strong>{getRoleInfo(selectedRole).label}</strong></p>
+              <p style={{ color: 'var(--text-muted)', fontSize: '0.9rem' }}>Identificação confirmada</p>
               <p style={{ color: 'var(--text-muted)', fontSize: '0.85rem' }}>CPF: {cpf}</p>
             </div>
 
@@ -182,7 +186,7 @@ export default function Login() {
                 <button 
                   type="button" 
                   onClick={() => setShowPassword(!showPassword)}
-                  style={{ position: 'absolute', right: '1rem', background: 'none', border: 'none', cursor: 'pointer', color: 'var(--text-muted)', display: 'flex', alignItems: 'center' }}
+                  style={{ position: 'absolute', right: '1rem', background: 'none', border: 'none', cursor: 'pointer', color: 'var(--primary)', display: 'flex', alignItems: 'center' }}
                   tabIndex={-1}
                 >
                   {showPassword ? <EyeOff size={18} /> : <Eye size={18} />}

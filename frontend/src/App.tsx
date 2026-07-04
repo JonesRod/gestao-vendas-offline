@@ -9,10 +9,15 @@ import Settings from './pages/Settings';
 import Receipts from './pages/Receipts';
 import Reports from './pages/Reports';
 import Login from './pages/Login';
+import ForgotPassword from './pages/ForgotPassword';
+import ResetPassword from './pages/ResetPassword';
 import StockEntries from './pages/StockEntries';
 import Finances from './pages/Finances';
 import Suppliers from './pages/Suppliers';
 import { AuthProvider } from './contexts/AuthContext';
+import StoreLayout from './components/StoreLayout';
+import StoreHome from './pages/StoreHome';
+import StoreProfile from './pages/StoreProfile';
 import ProtectedRoute from './components/ProtectedRoute';
 import './App.css';
 
@@ -33,7 +38,10 @@ function App() {
       <BrowserRouter>
         <Routes>
           <Route path="/login" element={<Login />} />
+          <Route path="/forgot-password" element={<ForgotPassword />} />
+          <Route path="/reset-password" element={<ResetPassword />} />
           
+          {/* Rotas Internas de Gestão */}
           <Route path="/" element={
             <ProtectedRoute>
               <AppLayout />
@@ -51,6 +59,17 @@ function App() {
             <Route path="funcionarios" element={<Employees />} />
             <Route path="reports" element={<Reports />} />
             <Route path="settings" element={<Settings />} />
+          </Route>
+
+          {/* Portal do Cliente */}
+          <Route path="/loja" element={
+            <ProtectedRoute>
+              <StoreLayout />
+            </ProtectedRoute>
+          }>
+            <Route index element={<StoreHome />} />
+            <Route path="perfil" element={<StoreProfile />} />
+            {/* Outras rotas da loja no futuro (pedidos, carrinho, etc) */}
           </Route>
         </Routes>
       </BrowserRouter>

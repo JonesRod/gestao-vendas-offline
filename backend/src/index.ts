@@ -21,6 +21,11 @@ app.post('/api/customers', async (req, res) => {
   const customer = await prisma.customer.create({ data: req.body });
   res.json(customer);
 });
+app.get('/api/customers/:id', async (req, res) => {
+  const { id } = req.params;
+  const customer = await prisma.customer.findUnique({ where: { id: Number(id) } });
+  res.json(customer);
+});
 
 app.put('/api/customers/:id', async (req, res) => {
   const { id } = req.params;
@@ -408,15 +413,32 @@ app.delete('/api/suppliers/:id', async (req, res) => {
 
 const JWT_SECRET = process.env.JWT_SECRET || 'secret_key_for_jwt_offline';
 
+// Função helper para buscar usuário por CPF com ou sem máscara
+const findUserByCpf = async (model: any, cpfString: string) => {
+  if (!cpfString) return null;
+  const cleanCpf = cpfString.replace(/\D/g, '');
+  if (cleanCpf.length !== 11) return null;
+  
+  const formattedCpf = cleanCpf.replace(/(\d{3})(\d{3})(\d{3})(\d{2})/, "$1.$2.$3-$4");
+  
+  return await model.findFirst({
+    where: {
+      OR: [
+        { cpf: { contains: cleanCpf } },
+        { cpf: { contains: formattedCpf } }
+      ]
+    }
+  });
+};
+
 // Rota auxiliar para verificar perfis de um CPF
 app.post('/api/auth/check-cpf', async (req, res) => {
   const { cpf } = req.body;
-  if (!cpf) return res.status(400).json({ error: 'CPF obrigatório' });
-
-  const cleanCpf = cpf.replace(/\D/g, '');
+  const cleanCpf = cpf?.replace(/\D/g, '');
+  
   const roles = [];
 
-  const employee = await prisma.employee.findFirst({ where: { cpf: { contains: cleanCpf } } });
+  const employee = await findUserByCpf(prisma.employee, cpf);
   if (employee) {
     roles.push(employee.role === 'ADMIN' ? 'ADMIN' : 'EMPLOYEE');
   } else if (cleanCpf === '02346827100') {
@@ -424,7 +446,7 @@ app.post('/api/auth/check-cpf', async (req, res) => {
     roles.push('ADMIN');
   }
 
-  const customer = await prisma.customer.findFirst({ where: { cpf: { contains: cleanCpf } } });
+  const customer = await findUserByCpf(prisma.customer, cpf);
   if (customer) {
     roles.push('CUSTOMER');
   }
@@ -438,43 +460,81 @@ app.post('/api/auth/login', async (req, res) => {
   const cleanCpf = cpf?.replace(/\D/g, '');
   const cleanPassword = password?.trim();
 
-  console.log(`[LOGIN ATTEMPT] CPF: ${cleanCpf}, Role: ${role}, PasswordLength: ${cleanPassword?.length}`);
+  console.log(`[LOGIN ATTEMPT] CPF: ${cleanCpf}, Role: ${role}`);
 
-  if (cleanCpf === '02346827100' && cleanPassword === '123456' && role === 'ADMIN') {
-    const token = jwt.sign({ id: 0, role: 'ADMIN' }, JWT_SECRET, { expiresIn: '7d' });
-    return res.json({ token, role: 'ADMIN', user: { name: 'Master Admin' } });
-  }
+  const validRoles = [];
+  let userDetails = null;
 
-  let user = null;
-  let userRole = role;
-
-  if (role === 'ADMIN' || role === 'EMPLOYEE') {
-    user = await prisma.employee.findFirst({ where: { cpf: { contains: cleanCpf } } });
-    if (user) {
-      userRole = user.role === 'ADMIN' ? 'ADMIN' : 'EMPLOYEE';
+  // Master Admin (fallback para ADMIN)
+  if (cleanCpf === '02346827100' && cleanPassword === '123456') {
+    validRoles.push('ADMIN');
+    if (role === 'ADMIN') {
+      userDetails = { id: 0, name: 'Master Admin', cpf: '023.468.271-00' };
     }
-  } else if (role === 'CUSTOMER') {
-    user = await prisma.customer.findFirst({ where: { cpf: { contains: cleanCpf } } });
   }
 
-  if (!user) {
-    return res.status(401).json({ error: 'Usuário não encontrado' });
+  // Verifica Employee
+  const employee = await findUserByCpf(prisma.employee, cpf);
+  if (employee) {
+    let validEmployeePass = false;
+    if (!employee.password) {
+      validEmployeePass = cleanPassword === cleanCpf.substring(0, 4);
+    } else {
+      validEmployeePass = await bcrypt.compare(cleanPassword, employee.password);
+    }
+    if (validEmployeePass) {
+      if (!validRoles.includes('ADMIN') && employee.role === 'ADMIN') validRoles.push('ADMIN');
+      if (employee.role === 'EMPLOYEE') validRoles.push('EMPLOYEE');
+      if (role && (role === 'ADMIN' || role === 'EMPLOYEE')) userDetails = employee;
+    }
   }
 
-  // Se o usuário não tiver senha configurada, usa os 4 primeiros dígitos do CPF
-  let validPassword = false;
-  if (!user.password) {
-    validPassword = cleanPassword === cleanCpf.substring(0, 4);
-  } else {
-    validPassword = await bcrypt.compare(cleanPassword, user.password);
+  // Verifica Customer
+  const customer = await findUserByCpf(prisma.customer, cpf);
+  if (customer) {
+    let validCustomerPass = false;
+    if (cleanCpf === '02346827100' && cleanPassword === '123456') {
+      validCustomerPass = true;
+    } else if (!customer.password) {
+      validCustomerPass = cleanPassword === cleanCpf.substring(0, 4);
+    } else {
+      validCustomerPass = await bcrypt.compare(cleanPassword, customer.password);
+    }
+    if (validCustomerPass) {
+      validRoles.push('CUSTOMER');
+      if (role === 'CUSTOMER') userDetails = customer;
+    }
   }
 
-  if (!validPassword) {
-    return res.status(401).json({ error: 'Senha incorreta' });
+  if (validRoles.length === 0) {
+    return res.status(401).json({ error: 'Credenciais inválidas' });
   }
 
-  const token = jwt.sign({ id: user.id, role: userRole }, JWT_SECRET, { expiresIn: '7d' });
-  res.json({ token, role: userRole, user });
+  if (!role) {
+    if (validRoles.length > 1) {
+      return res.json({ requireRoleSelection: true, availableRoles: validRoles });
+    }
+    const singleRole = validRoles[0];
+    let userToLog = singleRole === 'CUSTOMER' ? customer : employee;
+    if (!userToLog && singleRole === 'ADMIN' && cleanCpf === '02346827100') {
+      userToLog = { id: 0, name: 'Master Admin', cpf: '023.468.271-00' } as any;
+    }
+    if (!userToLog) return res.status(500).json({ error: 'Erro interno ao resolver usuário' });
+
+    const token = jwt.sign({ id: userToLog.id, role: singleRole }, JWT_SECRET, { expiresIn: '7d' });
+    return res.json({ token, role: singleRole, user: { id: userToLog.id, name: userToLog.name, cpf: userToLog.cpf } });
+  }
+
+  if (!validRoles.includes(role)) {
+    return res.status(401).json({ error: 'Perfil não autorizado para estas credenciais' });
+  }
+
+  if (!userDetails) {
+    return res.status(500).json({ error: 'Erro interno ao resolver detalhes do perfil' });
+  }
+
+  const token = jwt.sign({ id: userDetails.id, role }, JWT_SECRET, { expiresIn: '7d' });
+  return res.json({ token, role, user: { id: userDetails.id, name: userDetails.name, cpf: userDetails.cpf } });
 });
 
 // Recuperação de senha simulada

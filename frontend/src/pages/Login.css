@@ -73,7 +73,7 @@
 .input-with-icon > svg {
   position: absolute;
   left: 1rem;
-  color: var(--text-muted);
+  color: var(--primary);
   width: 18px;
   height: 18px;
 }
@@ -88,6 +88,16 @@
   font-family: inherit;
   font-size: 0.95rem;
   transition: all 0.2s ease;
+}
+
+/* Corrigir o fundo branco do Autofill no Chrome/Edge */
+.input-with-icon input:-webkit-autofill,
+.input-with-icon input:-webkit-autofill:hover, 
+.input-with-icon input:-webkit-autofill:focus, 
+.input-with-icon input:-webkit-autofill:active{
+    -webkit-box-shadow: 0 0 0 30px var(--bg-panel) inset !important;
+    -webkit-text-fill-color: var(--text-main) !important;
+    transition: background-color 5000s ease-in-out 0s;
 }
 
 .input-with-icon input:focus {

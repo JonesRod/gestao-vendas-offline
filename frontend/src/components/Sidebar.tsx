@@ -24,7 +24,7 @@ export default function Sidebar() {
   const [theme, setTheme] = useState<'dark'|'light'>('dark');
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
   const [isCollapsed, setIsCollapsed] = useState(false);
-  const { logout } = useAuth();
+  const { logout, user, role } = useAuth();
   const navigate = useNavigate();
 
   useEffect(() => {
@@ -121,12 +121,12 @@ export default function Sidebar() {
            {!isCollapsed && <span className="nav-label" style={{ fontWeight: 500 }}>Sair</span>}
         </button>
 
-        <div className={`user-profile ${isCollapsed ? 'collapsed' : ''}`} title={isCollapsed ? "João Doe" : undefined}>
-          <div className="avatar">JD</div>
+        <div className={`user-profile ${isCollapsed ? 'collapsed' : ''}`} title={isCollapsed ? (user?.name || "Usuário") : undefined}>
+          <div className="avatar">{user?.name ? user.name.substring(0,2).toUpperCase() : "US"}</div>
           {!isCollapsed && (
             <div className="user-info">
-              <p className="user-name">João Doe</p>
-              <p className="user-role">Administrador</p>
+              <p className="user-name">{user?.name || "Usuário"}</p>
+              <p className="user-role">{role === 'ADMIN' ? 'Administrador' : role === 'EMPLOYEE' ? 'Funcionário' : 'Cliente'}</p>
             </div>
           )}
         </div>
