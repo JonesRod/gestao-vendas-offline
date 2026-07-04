@@ -58,6 +58,11 @@ export interface Product {
   is_active?: boolean;
   images?: string[];
   type: 'product' | 'kit';
+  is_promotional?: boolean;
+  promo_price_cash?: number;
+  promo_price_credit?: number;
+  promo_start_date?: string | null;
+  promo_end_date?: string | null;
   kit_items?: KitItem[];
   allow_credit?: boolean;
   max_installments?: number;

@@ -64,6 +64,11 @@ model Product {
   loyalty_discount_active      Boolean? @default(false)
   loyalty_discount_percent     Float?   @default(0)
   loyalty_discount_value       Float?   @default(0)
+  is_promotional               Boolean? @default(false)
+  promo_price_cash             Float?
+  promo_price_credit           Float?
+  promo_start_date             DateTime?
+  promo_end_date               DateTime?
   created_at                   DateTime @default(now())
 
   saleItems       SaleItem[]

@@ -10,7 +10,7 @@ import './Inventory.css';
 export default function Inventory() {
   const settingsData = useLiveQuery(() => db.settings.get(1));
   const [searchTerm, setSearchTerm] = useState('');
-  const [filter, setFilter] = useState<'all' | 'kits' | 'avulsos' | 'low'>('all');
+  const [filter, setFilter] = useState<'all' | 'kits' | 'avulsos' | 'low' | 'promo'>('all');
   const [kitAvailableSearch, setKitAvailableSearch] = useState('');
   const [kitSelectedSearch, setKitSelectedSearch] = useState('');
   const [isModalOpen, setIsModalOpen] = useState(false);
@@ -18,7 +18,7 @@ export default function Inventory() {
   const [modalType, setModalType] = useState<'product' | 'kit'>('product');
   
   const initialFormState: Partial<Product> = {
-    name: '', description: '', cost: 0, margin_cash: 0, margin_credit: 0, price_cash: 0, price_credit: 0, stock: 0, is_active: true, images: [], type: 'product', allow_credit: true, max_installments: 1, punctuality_discount_active: false, punctuality_discount_percent: 0, punctuality_discount_value: 0, loyalty_discount_active: false, loyalty_discount_percent: 0, loyalty_discount_value: 0
+    name: '', description: '', cost: 0, margin_cash: 0, margin_credit: 0, price_cash: 0, price_credit: 0, stock: 0, is_active: true, images: [], type: 'product', allow_credit: true, max_installments: 1, punctuality_discount_active: false, punctuality_discount_percent: 0, punctuality_discount_value: 0, loyalty_discount_active: false, loyalty_discount_percent: 0, loyalty_discount_value: 0, is_promotional: false, promo_price_cash: 0, promo_price_credit: 0, promo_start_date: '', promo_end_date: ''
   };
   const [formData, setFormData] = useState<Partial<Product>>(initialFormState);
   
@@ -192,6 +192,14 @@ export default function Inventory() {
     });
   };
 
+  const handlePromoPriceChange = (type: 'cash' | 'credit', priceInput: string) => {
+    const price = parseCurrency(priceInput);
+    setFormData(prev => ({
+      ...prev,
+      [type === 'cash' ? 'promo_price_cash' : 'promo_price_credit']: price
+    }));
+  };
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     const productData = {
@@ -214,7 +222,12 @@ export default function Inventory() {
       punctuality_discount_value: Number(formData.punctuality_discount_value) || 0,
       loyalty_discount_active: formData.loyalty_discount_active || false,
       loyalty_discount_percent: Number(formData.loyalty_discount_percent) || 0,
-      loyalty_discount_value: Number(formData.loyalty_discount_value) || 0
+      loyalty_discount_value: Number(formData.loyalty_discount_value) || 0,
+      is_promotional: formData.is_promotional || false,
+      promo_price_cash: Number(formData.promo_price_cash) || 0,
+      promo_price_credit: Number(formData.promo_price_credit) || 0,
+      promo_start_date: formData.promo_start_date || null,
+      promo_end_date: formData.promo_end_date || null
     };
 
     try {
@@ -237,6 +250,7 @@ export default function Inventory() {
     if (filter === 'kits') return p.type === 'kit';
     if (filter === 'avulsos') return p.type === 'product';
     if (filter === 'low') return p.stock <= 10;
+    if (filter === 'promo') return p.is_promotional === true;
     return true;
   });
 
@@ -270,6 +284,7 @@ export default function Inventory() {
           <button className={`pill ${filter === 'all' ? 'active' : ''}`} onClick={() => setFilter('all')}>Todos</button>
           <button className={`pill ${filter === 'kits' ? 'active' : ''}`} onClick={() => setFilter('kits')}>Cestas (Kits)</button>
           <button className={`pill ${filter === 'avulsos' ? 'active' : ''}`} onClick={() => setFilter('avulsos')}>Avulsos</button>
+          <button className={`pill ${filter === 'promo' ? 'active' : ''}`} style={filter === 'promo' ? { background: 'var(--primary)', color: 'white', borderColor: 'var(--primary)' } : {}} onClick={() => setFilter('promo')}>Em Promoção</button>
           <button className={`pill danger ${filter === 'low' ? 'active' : ''}`} onClick={() => setFilter('low')}>Estoque Baixo</button>
         </div>
       </div>
@@ -291,7 +306,14 @@ export default function Inventory() {
                     </div>
                   )}
                   <div>
-                    <div className="type-badge">{product.type === 'kit' ? 'Cesta / Kit' : 'Produto Avulso'}</div>
+                    <div style={{ display: 'flex', gap: '0.5rem', alignItems: 'center' }}>
+                      <div className="type-badge">{product.type === 'kit' ? 'Cesta / Kit' : 'Produto Avulso'}</div>
+                      {product.is_promotional && (
+                        <div className="type-badge" style={{ background: 'var(--primary)', color: 'white', borderColor: 'var(--primary)' }}>
+                          Promoção
+                        </div>
+                      )}
+                    </div>
                     <h3 style={{fontSize: '1.05rem', margin: '0.2rem 0 0 0'}}>{product.name}</h3>
                   </div>
                 </div>
@@ -488,6 +510,39 @@ export default function Inventory() {
                   <label>Preço Fiado / Prazo (R$)</label>
                   <input type="text" required value={maskCurrency(formData.price_credit || 0)} onChange={e => handlePriceChange('credit', e.target.value)} />
                 </div>
+              </div>
+
+              {/* Seção de Promoção em Destaque */}
+              <div style={{ marginTop: '1.5rem', border: '2px dashed var(--primary)', borderRadius: '8px', padding: '1rem', background: 'rgba(108, 92, 231, 0.05)' }}>
+                <label style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', cursor: 'pointer', color: 'var(--primary)', fontWeight: 'bold', fontSize: '1.05rem', marginBottom: formData.is_promotional ? '1rem' : '0' }}>
+                  <input type="checkbox" checked={formData.is_promotional || false} onChange={e => setFormData({...formData, is_promotional: e.target.checked})} style={{ width: '18px', height: '18px', accentColor: 'var(--primary)' }} />
+                  Por em Promoção (Destaque na Loja)
+                </label>
+                
+                {formData.is_promotional && (
+                  <>
+                    <div className="form-row">
+                      <div className="form-group">
+                        <label style={{ color: 'var(--text-main)' }}>Valor Promocional à Vista (R$)</label>
+                        <input type="text" required value={maskCurrency(formData.promo_price_cash || 0)} onChange={e => handlePromoPriceChange('cash', e.target.value)} style={{ borderColor: 'var(--primary)' }} />
+                      </div>
+                      <div className="form-group">
+                        <label style={{ color: 'var(--text-main)' }}>Valor Promocional a Prazo (R$)</label>
+                        <input type="text" required value={maskCurrency(formData.promo_price_credit || 0)} onChange={e => handlePromoPriceChange('credit', e.target.value)} style={{ borderColor: 'var(--primary)' }} />
+                      </div>
+                    </div>
+                    <div className="form-row" style={{ marginTop: '1rem' }}>
+                      <div className="form-group">
+                        <label style={{ color: 'var(--text-main)' }}>Data de Início</label>
+                        <input type="date" required value={formData.promo_start_date ? new Date(formData.promo_start_date).toISOString().split('T')[0] : ''} onChange={e => setFormData({...formData, promo_start_date: e.target.value ? new Date(e.target.value).toISOString() : ''})} style={{ borderColor: 'var(--primary)' }} />
+                      </div>
+                      <div className="form-group">
+                        <label style={{ color: 'var(--text-main)' }}>Data Final</label>
+                        <input type="date" required value={formData.promo_end_date ? new Date(formData.promo_end_date).toISOString().split('T')[0] : ''} onChange={e => setFormData({...formData, promo_end_date: e.target.value ? new Date(e.target.value).toISOString() : ''})} style={{ borderColor: 'var(--primary)' }} />
+                      </div>
+                    </div>
+                  </>
+                )}
               </div>
             </>
           )}
