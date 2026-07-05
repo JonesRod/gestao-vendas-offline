@@ -22,6 +22,7 @@ export default function StoreCart() {
 
   const [creditDueDate, setCreditDueDate] = useState('');
   const [showSuccessModal, setShowSuccessModal] = useState(false);
+  const [showConfirmModal, setShowConfirmModal] = useState(false);
   const [successData, setSuccessData] = useState<string[]>([]);
 
   const hasActiveCredit = user && user.credit_limit > 0 && !user.is_blocked;
@@ -502,7 +503,7 @@ export default function StoreCart() {
           </div>
           
           <button 
-            onClick={handleCheckout}
+            onClick={() => setShowConfirmModal(true)}
             className="btn-primary" 
             style={{ width: '100%', padding: '1rem', fontSize: '1.1rem', fontWeight: 'bold', borderRadius: '8px', opacity: Math.abs(remaining) > 0.05 ? 0.5 : 1 }}
             disabled={Math.abs(remaining) > 0.05}
@@ -511,6 +512,35 @@ export default function StoreCart() {
           </button>
         </div>
       </div>
+
+      {showConfirmModal && (
+        <div style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, background: 'rgba(0,0,0,0.7)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 9999 }} onClick={() => setShowConfirmModal(false)}>
+          <div className="glass-panel" onClick={e => e.stopPropagation()} style={{ padding: '2rem', borderRadius: '12px', maxWidth: '400px', width: '90%', textAlign: 'center', background: 'var(--bg-panel)', boxShadow: '0 10px 25px rgba(0,0,0,0.5)' }}>
+            <h2 style={{ color: 'var(--text-main)', marginBottom: '1rem' }}>Confirmar Pedido</h2>
+            <p style={{ color: 'var(--text-secondary)', marginBottom: '2rem' }}>
+              Deseja finalizar o pedido no valor de <strong style={{ color: 'var(--warning)' }}>R$ {currentTotal.toLocaleString('pt-BR', {minimumFractionDigits: 2})}</strong>?
+            </p>
+            <div style={{ display: 'flex', gap: '1rem' }}>
+              <button 
+                onClick={() => setShowConfirmModal(false)}
+                style={{ flex: 1, padding: '0.8rem', background: 'transparent', border: '1px solid var(--border-color)', color: 'var(--text-main)', borderRadius: '8px', cursor: 'pointer' }}
+              >
+                Cancelar
+              </button>
+              <button 
+                onClick={() => {
+                  setShowConfirmModal(false);
+                  handleCheckout();
+                }}
+                className="btn-primary" 
+                style={{ flex: 1, padding: '0.8rem', borderRadius: '8px', fontWeight: 'bold' }}
+              >
+                Confirmar
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {showSuccessModal && (
         <div style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, background: 'rgba(0,0,0,0.7)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 9999 }}>

@@ -49,9 +49,7 @@ export default function StoreInstallments() {
     }
   };
 
-  const openPaymentModal = (inst: any) => {
-    setPayingInst(inst);
-    
+  const getInstallmentTotals = (inst: any) => {
     let calcDiscount = 0;
     let calcPenalty = 0;
     let calcInterest = 0;
@@ -59,7 +57,6 @@ export default function StoreInstallments() {
     const todayNum = new Date().setHours(0,0,0,0);
     const dueNum = new Date(inst.due_date).setHours(0,0,0,0);
 
-    // Multas e Juros
     if (settings?.penalty_active && todayNum > dueNum) {
       const daysLate = Math.floor((todayNum - dueNum) / (1000 * 60 * 60 * 24));
       const monthsLate = daysLate / 30;
@@ -67,7 +64,6 @@ export default function StoreInstallments() {
       calcInterest = inst.amount * ((settings.interest_percent || 0) / 100) * monthsLate;
     }
 
-    // Descontos
     const punctualityGraceDays = settings?.punctuality_discount_days || 0;
     const punctualityLimitDate = new Date(dueNum);
     punctualityLimitDate.setDate(punctualityLimitDate.getDate() + punctualityGraceDays);
@@ -81,15 +77,21 @@ export default function StoreInstallments() {
       calcDiscount += (inst.loyalty_discount_value || 0);
     }
 
-    // Não dar desconto maior que o valor da parcela
     if (calcDiscount > inst.amount) calcDiscount = inst.amount;
 
-    setDiscountAmount(calcDiscount);
-    setPenaltyAmount(calcPenalty);
-    setInterestAmount(calcInterest);
-    
     const finalExpected = inst.amount + calcPenalty + calcInterest - calcDiscount;
-    setPaymentAmount(finalExpected);
+    return { calcDiscount, calcPenalty, calcInterest, finalExpected };
+  };
+
+  const openPaymentModal = (inst: any) => {
+    setPayingInst(inst);
+    
+    const totals = getInstallmentTotals(inst);
+
+    setDiscountAmount(totals.calcDiscount);
+    setPenaltyAmount(totals.calcPenalty);
+    setInterestAmount(totals.calcInterest);
+    setPaymentAmount(totals.finalExpected);
     setSplitPayments({});
     
     const d = new Date(inst.due_date);
@@ -172,7 +174,9 @@ export default function StoreInstallments() {
             <p style={{ color: 'var(--text-secondary)' }}>Nenhuma fatura em aberto.</p>
           ) : (
             <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
-              {pending.map(inst => (
+              {pending.map(inst => {
+                const totals = getInstallmentTotals(inst);
+                return (
                 <div key={inst.id} className="glass-panel" style={{ padding: '1.5rem', borderRadius: '12px', display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '1rem' }}>
                   <div>
                     <h4 style={{ margin: '0 0 0.25rem 0', color: 'var(--text-main)' }}>Pedido #{inst.saleId} - Parcela {inst.number}/{inst.total}</h4>
@@ -181,8 +185,8 @@ export default function StoreInstallments() {
                   
                   <div style={{ display: 'flex', alignItems: 'center', gap: '1.5rem', flexWrap: 'wrap' }}>
                     <div style={{ textAlign: 'right' }}>
-                      <span style={{ fontSize: '0.8rem', color: 'var(--text-secondary)', display: 'block' }}>Valor</span>
-                      <strong style={{ fontSize: '1.2rem', color: 'var(--warning)' }}>R$ {inst.amount.toLocaleString('pt-BR', {minimumFractionDigits: 2})}</strong>
+                      <span style={{ fontSize: '0.8rem', color: 'var(--text-secondary)', display: 'block' }}>Valor {totals.calcDiscount > 0 ? '(c/ Desconto)' : ''}</span>
+                      <strong style={{ fontSize: '1.2rem', color: 'var(--warning)' }}>R$ {totals.finalExpected.toLocaleString('pt-BR', {minimumFractionDigits: 2})}</strong>
                     </div>
                     
                     <div style={{ display: 'flex', gap: '0.5rem' }}>
@@ -203,7 +207,8 @@ export default function StoreInstallments() {
                     </div>
                   </div>
                 </div>
-              ))}
+                );
+              })}
             </div>
           )}
         </section>
