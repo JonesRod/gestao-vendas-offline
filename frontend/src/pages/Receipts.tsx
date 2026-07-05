@@ -138,14 +138,12 @@ export default function Receipts() {
     punctualityLimitDate.setDate(punctualityLimitDate.getDate() + punctualityGraceDays);
     const punctualityLimitNum = punctualityLimitDate.setHours(0,0,0,0);
 
-    if (settings?.punctuality_discount_active && todayNum <= punctualityLimitNum) {
+    if (todayNum <= punctualityLimitNum) {
       calcAutoDiscount += (installment.punctuality_discount_value || 0);
     }
 
     // Desconto Fidelidade
-    if (settings?.loyalty_active && selectedCustomer?.is_loyal) {
-      calcAutoDiscount += (installment.loyalty_discount_value || 0);
-    }
+    calcAutoDiscount += (installment.loyalty_discount_value || 0);
 
     if (calcAutoDiscount > installment.amount) calcAutoDiscount = installment.amount;
 

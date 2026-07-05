@@ -69,13 +69,11 @@ export default function StoreInstallments() {
     punctualityLimitDate.setDate(punctualityLimitDate.getDate() + punctualityGraceDays);
     const punctualityLimitNum = punctualityLimitDate.setHours(0,0,0,0);
 
-    if (settings?.punctuality_discount_active && todayNum <= punctualityLimitNum) {
+    if (todayNum <= punctualityLimitNum) {
       calcDiscount += (inst.punctuality_discount_value || 0);
     }
 
-    if (settings?.loyalty_active && inst.customer?.is_loyal) {
-      calcDiscount += (inst.loyalty_discount_value || 0);
-    }
+    calcDiscount += (inst.loyalty_discount_value || 0);
 
     if (calcDiscount > inst.amount) calcDiscount = inst.amount;
 
@@ -333,10 +331,8 @@ export default function StoreInstallments() {
                 <label style={{ marginBottom: '0.8rem', display: 'block' }}>Métodos de Pagamento</label>
                 <div style={{ display: 'flex', flexWrap: 'wrap', gap: '10px' }}>
                   {[
-                    { id: 'dinheiro', label: 'Dinheiro' },
                     { id: 'pix', label: 'PIX' },
-                    { id: 'cartao_debito', label: 'Cartão Débito' },
-                    { id: 'cartao_credito', label: 'Cartão Crédito' }
+                    { id: 'cartao_debito', label: 'Cartão Débito' }
                   ].map(opt => {
                     const isChecked = splitPayments[opt.id] !== undefined;
                     return (
