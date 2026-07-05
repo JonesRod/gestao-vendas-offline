@@ -25,6 +25,8 @@ export default function Receipts() {
   const [paymentAmount, setPaymentAmount] = useState<number>(0);
   const [discountAmount, setDiscountAmount] = useState<number>(0);
   const [autoDiscount, setAutoDiscount] = useState<number>(0);
+  const [penaltyAmount, setPenaltyAmount] = useState<number>(0);
+  const [interestAmount, setInterestAmount] = useState<number>(0);
   const [nextDueDate, setNextDueDate] = useState('');
   const [showConfirmPayment, setShowConfirmPayment] = useState(false);
   const [splitPayments, setSplitPayments] = useState<Record<string, number>>({ dinheiro: 0 });
@@ -116,19 +118,46 @@ export default function Receipts() {
     setSelectedInstallment(installment);
     
     let calcAutoDiscount = 0;
-    if (settings?.punctuality_discount_active) {
-       const todayNum = new Date().setHours(0,0,0,0);
-       const dueNum = new Date(installment.due_date).setHours(0,0,0,0);
-       if (todayNum <= dueNum) {
-          calcAutoDiscount = installment.amount * ((settings.punctuality_discount_percent || 0) / 100);
-       }
+    let calcPenalty = 0;
+    let calcInterest = 0;
+
+    const todayNum = new Date().setHours(0,0,0,0);
+    const dueNum = new Date(installment.due_date).setHours(0,0,0,0);
+
+    // Multas e Juros
+    if (settings?.penalty_active && todayNum > dueNum) {
+      const daysLate = Math.floor((todayNum - dueNum) / (1000 * 60 * 60 * 24));
+      const monthsLate = daysLate / 30;
+      calcPenalty = installment.amount * ((settings.penalty_percent || 0) / 100);
+      calcInterest = installment.amount * ((settings.interest_percent || 0) / 100) * monthsLate;
     }
+
+    // Desconto Pontualidade
+    const punctualityGraceDays = settings?.punctuality_discount_days || 0;
+    const punctualityLimitDate = new Date(dueNum);
+    punctualityLimitDate.setDate(punctualityLimitDate.getDate() + punctualityGraceDays);
+    const punctualityLimitNum = punctualityLimitDate.setHours(0,0,0,0);
+
+    if (settings?.punctuality_discount_active && todayNum <= punctualityLimitNum) {
+      calcAutoDiscount += (installment.punctuality_discount_value || 0);
+    }
+
+    // Desconto Fidelidade
+    if (settings?.loyalty_active && selectedCustomer?.is_loyal) {
+      calcAutoDiscount += (installment.loyalty_discount_value || 0);
+    }
+
+    if (calcAutoDiscount > installment.amount) calcAutoDiscount = installment.amount;
+
     setAutoDiscount(calcAutoDiscount);
     setDiscountAmount(calcAutoDiscount);
+    setPenaltyAmount(calcPenalty);
+    setInterestAmount(calcInterest);
 
-    setPaymentAmount(installment.amount - calcAutoDiscount);
+    const finalExpected = installment.amount + calcPenalty + calcInterest - calcAutoDiscount;
+    setPaymentAmount(finalExpected);
     setNextDueDate('');
-    setSplitPayments({ dinheiro: installment.amount - calcAutoDiscount });
+    setSplitPayments({ dinheiro: finalExpected });
     setIsPaymentModalOpen(true);
   };
 
@@ -136,7 +165,7 @@ export default function Receipts() {
     e.preventDefault();
     if (!selectedCustomer || !selectedCustomer.id || !selectedInstallment || !selectedInstallment.id) return;
     
-    const finalExpected = selectedInstallment.amount - discountAmount;
+    const finalExpected = selectedInstallment.amount + penaltyAmount + interestAmount - discountAmount;
 
     if (paymentAmount <= 0 && finalExpected > 0) {
       alert('Valor de pagamento inválido.');
@@ -167,7 +196,7 @@ export default function Receipts() {
 
   const executePayment = async () => {
     if (!selectedCustomer || !selectedCustomer.id || !selectedInstallment || !selectedInstallment.id) return;
-    const finalExpected = selectedInstallment.amount - discountAmount;
+    const finalExpected = selectedInstallment.amount + penaltyAmount + interestAmount - discountAmount;
     const isPartial = paymentAmount < finalExpected;
     
     try {
@@ -177,13 +206,19 @@ export default function Receipts() {
           status: 'paid' 
         });
       } else {
-        // 1. Recebimento parcial: diminui o valor da parcela abatendo o desconto junto e empurra a validade
-        const [y, m, d] = nextDueDate.split('-');
-        const dateObj = new Date(Number(y), Number(m) - 1, Number(d));
-        await api.put(`/installments/${selectedInstallment.id}`, {
-          amount: finalExpected - paymentAmount,
-          due_date: dateObj
+        // 1. Recebimento parcial: cria nova parcela com o saldo e abate a atual
+        const remainingBase = finalExpected - paymentAmount;
+        await api.post('/installments', {
+          saleId: selectedInstallment.saleId,
+          customerId: selectedCustomer.id,
+          amount: remainingBase,
+          due_date: new Date(nextDueDate).toISOString(),
+          status: 'pending',
+          number: selectedInstallment.number,
+          total: selectedInstallment.total,
+          productName: selectedInstallment.productName + ' (Restante)'
         });
+        await api.put(`/installments/${selectedInstallment.id}`, { status: 'paid', amount: paymentAmount + discountAmount - penaltyAmount - interestAmount });
       }
 
       // 2. Registra o dinheiro físico que entrou
@@ -505,26 +540,52 @@ Obrigado pela preferência!`;
               </div>
               <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '0.5rem' }}>
                 <span style={{ color: 'var(--text-muted)' }}>Acréscimos (Atraso):</span>
-                <span style={{ color: 'var(--warning)' }}>R$ 0,00</span>
+                <span style={{ color: 'var(--warning)' }}>R$ { (penaltyAmount + interestAmount).toLocaleString('pt-BR', {minimumFractionDigits: 2}) }</span>
               </div>
-              <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '0.5rem' }}>
-                <span style={{ color: 'var(--text-muted)' }}>Desconto Autom. (Pontualidade):</span>
-                <span style={{ color: 'var(--success)' }}>
-                  {settings?.punctuality_discount_active && new Date().setHours(0,0,0,0) <= new Date(selectedInstallment.due_date).setHours(0,0,0,0) 
-                    ? `- R$ ${(selectedInstallment.amount * ((settings.punctuality_discount_percent || 0) / 100)).toLocaleString('pt-BR', {minimumFractionDigits: 2, maximumFractionDigits: 2})}` 
-                    : 'R$ 0,00'}
-                </span>
+              {(penaltyAmount > 0 || interestAmount > 0) && (
+                <div style={{ background: 'rgba(239, 68, 68, 0.1)', border: '1px solid rgba(239, 68, 68, 0.2)', padding: '1rem', borderRadius: '12px', marginBottom: '1rem' }}>
+                  <p style={{ margin: 0, color: 'var(--danger)', fontSize: '0.9rem', fontWeight: 'bold' }}>Atraso Detectado</p>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.9rem', marginTop: '0.5rem' }}>
+                    <span>Multa:</span>
+                    <span>R$ {penaltyAmount.toLocaleString('pt-BR', {minimumFractionDigits: 2})}</span>
+                  </div>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.9rem' }}>
+                    <span>Juros:</span>
+                    <span>R$ {interestAmount.toLocaleString('pt-BR', {minimumFractionDigits: 2})}</span>
+                  </div>
+                </div>
+              )}
+
+              {autoDiscount > 0 && (
+                <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '0.5rem' }}>
+                  <span style={{ color: 'var(--text-muted)' }}>Desconto Automático (Fidelidade/Pontualidade):</span>
+                  <span style={{ color: 'var(--success)' }}>
+                    - R$ {autoDiscount.toLocaleString('pt-BR', {minimumFractionDigits: 2, maximumFractionDigits: 2})}
+                  </span>
+                </div>
+              )}
+              
+              <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '0.5rem', alignItems: 'center' }}>
+                <span style={{ color: 'var(--text-muted)' }}>Desconto Manual Adicional:</span>
+                <input 
+                  type="number" 
+                  value={discountAmount - autoDiscount < 0 ? 0 : discountAmount - autoDiscount} 
+                  onChange={e => {
+                    const extraDiscount = Number(e.target.value);
+                    setDiscountAmount(autoDiscount + extraDiscount);
+                    setPaymentAmount(selectedInstallment.amount + penaltyAmount + interestAmount - autoDiscount - extraDiscount);
+                  }}
+                  style={{ width: '100px', textAlign: 'right', background: 'var(--bg-lighter)' }}
+                />
               </div>
+
               <hr style={{ borderColor: 'rgba(255,255,255,0.1)', margin: '1rem 0' }} />
               <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '1.2rem', fontWeight: 800 }}>
                 <span>Total a Receber Agora:</span>
                 <span>R$ {
-                  settings?.punctuality_discount_active && new Date().setHours(0,0,0,0) <= new Date(selectedInstallment.due_date).setHours(0,0,0,0)
-                  ? (selectedInstallment.amount - (selectedInstallment.amount * ((settings.punctuality_discount_percent || 0) / 100))).toLocaleString('pt-BR', {minimumFractionDigits: 2, maximumFractionDigits: 2})
-                  : selectedInstallment.amount.toLocaleString('pt-BR', {minimumFractionDigits: 2, maximumFractionDigits: 2})
+                  Math.max(0, selectedInstallment.amount + penaltyAmount + interestAmount - discountAmount).toLocaleString('pt-BR', {minimumFractionDigits: 2, maximumFractionDigits: 2})
                 }</span>
               </div>
-              <p style={{ fontSize: '0.8rem', color: 'var(--text-muted)', marginTop: '0.5rem', fontStyle: 'italic', textAlign: 'right' }}>*Módulo de multas/juros não ativo nativamente.</p>
             </div>
           </div>
         )}
@@ -536,7 +597,7 @@ Obrigado pela preferência!`;
           <div style={{ background: 'rgba(16, 185, 129, 0.1)', border: '1px solid rgba(16, 185, 129, 0.2)', padding: '1.5rem', borderRadius: '12px', marginBottom: '1.5rem', textAlign: 'center' }}>
             <p style={{ fontSize: '0.9rem', color: 'var(--text-muted)' }}>Original da Parcela {selectedInstallment?.number}/{selectedInstallment?.total}</p>
             <h3 style={{ fontSize: '2.5rem', margin: '0.5rem 0', color: 'var(--success)' }}>
-               R$ {selectedInstallment?.amount.toLocaleString('pt-BR', {minimumFractionDigits: 2, maximumFractionDigits: 2})}
+               R$ {( (selectedInstallment?.amount || 0) + penaltyAmount + interestAmount - discountAmount).toLocaleString('pt-BR', {minimumFractionDigits: 2, maximumFractionDigits: 2})}
             </h3>
             <p style={{ color: 'white' }}>{selectedInstallment?.productName}</p>
           </div>
@@ -550,9 +611,8 @@ Obrigado pela preferência!`;
               value={maskCurrency(discountAmount)} 
               onChange={e => {
                 let val = parseCurrency(e.target.value) as number;
-                if (val > (selectedInstallment?.amount || 0)) val = selectedInstallment!.amount;
                 setDiscountAmount(val);
-                setPaymentAmount(selectedInstallment!.amount - val);
+                setPaymentAmount(selectedInstallment!.amount + penaltyAmount + interestAmount - val);
               }} 
               style={{ fontSize: '1.2rem', padding: '0.8rem', width: '100%', borderRadius: '8px', background: 'transparent', color: 'var(--text-main)', border: '1px solid var(--border-color)' }}
             />
@@ -566,20 +626,20 @@ Obrigado pela preferência!`;
               value={maskCurrency(paymentAmount)} 
               onChange={e => {
                 let val = parseCurrency(e.target.value) as number;
-                const finalExpected = (selectedInstallment?.amount || 0) - discountAmount;
+                const finalExpected = (selectedInstallment?.amount || 0) + penaltyAmount + interestAmount - discountAmount;
                 if (val > finalExpected) val = finalExpected;
                 setPaymentAmount(val);
               }} 
               style={{ fontSize: '1.5rem', fontWeight: 700, padding: '1rem', width: '100%', borderRadius: '8px', background: 'transparent', color: 'var(--text-main)', border: '1px solid var(--border-color)' }}
             />
-            {paymentAmount < ((selectedInstallment?.amount || 0) - discountAmount) && paymentAmount > 0 && (
+            {paymentAmount < ((selectedInstallment?.amount || 0) + penaltyAmount + interestAmount - discountAmount) && paymentAmount > 0 && (
               <p style={{ color: 'var(--warning)', marginTop: '0.5rem', fontSize: '0.85rem' }}>
-                Recebimento parcial! Restarão <strong>R$ {((selectedInstallment!.amount - discountAmount) - paymentAmount).toLocaleString('pt-BR', {minimumFractionDigits: 2, maximumFractionDigits: 2})}</strong> pendentes.
+                Recebimento parcial! Ficarão pendentes <strong>R$ {((selectedInstallment!.amount + penaltyAmount + interestAmount - discountAmount) - paymentAmount).toLocaleString('pt-BR', {minimumFractionDigits: 2, maximumFractionDigits: 2})}</strong>
               </p>
             )}
           </div>
 
-          {paymentAmount < ((selectedInstallment?.amount || 0) - discountAmount) && paymentAmount > 0 && (
+          {paymentAmount < ((selectedInstallment?.amount || 0) + penaltyAmount + interestAmount - discountAmount) && paymentAmount > 0 && (
             <div className="form-group" style={{ marginTop: '1rem' }}>
               <label style={{ color: 'var(--warning)' }}>
                 Reagendar restante (Vencimento Atual: {selectedInstallment?.due_date ? new Date(selectedInstallment.due_date).toLocaleDateString('pt-BR') : 'N/A'})

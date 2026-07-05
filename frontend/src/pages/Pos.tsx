@@ -1,4 +1,4 @@
-import { Search, Trash2, CheckCircle, X, Banknote, CreditCard, MapPin, ShoppingCart, AlertCircle, Printer, Share2 } from 'lucide-react';
+import { Search, Trash2, CheckCircle, X, MapPin, ShoppingCart, AlertCircle, Printer, Share2 } from 'lucide-react';
 import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { api } from '../services/api';
@@ -160,26 +160,7 @@ Obrigado pela preferência!`;
     }
   }, [currentTotal]);
 
-  const handleSplitChange = (method: string, valueStr: string) => {
-    const value = valueStr.replace(/\D/g, '');
-    const numericValue = parseInt(value, 10) / 100;
-    setSplitPayments(prev => ({
-      ...prev,
-      [method]: isNaN(numericValue) ? 0 : numericValue
-    }));
-  };
 
-  const togglePaymentMethod = (method: string) => {
-    setSplitPayments(prev => {
-      const next = { ...prev };
-      if (next[method] !== undefined) {
-        delete next[method];
-      } else {
-        next[method] = 0;
-      }
-      return next;
-    });
-  };
 
   const filteredProducts = products.filter((p: Product) =>
     p.name.toLowerCase().includes(searchTerm.toLowerCase())
@@ -289,6 +270,12 @@ Obrigado pela preferência!`;
           const installmentsCount = item.selected_installments || 1;
           const installmentValue = remainingAmount / installmentsCount;
 
+          const itemTotalPunctuality = item.punctuality_discount_active ? (item.punctuality_discount_value || 0) * item.quantity : 0;
+          const punctualityPerInstallment = itemTotalPunctuality / installmentsCount;
+
+          const itemTotalLoyalty = item.loyalty_discount_active ? (item.loyalty_discount_value || 0) * item.quantity : 0;
+          const loyaltyPerInstallment = itemTotalLoyalty / installmentsCount;
+
           for (let i = 1; i <= installmentsCount; i++) {
             const dateObj = new Date(baseYear, baseMonth + (i - 1), baseDay);
             allInstallments.push({
@@ -298,7 +285,9 @@ Obrigado pela preferência!`;
               status: 'pending',
               number: i,
               total: installmentsCount,
-              productName: item.name
+              productName: item.name,
+              punctuality_discount_value: punctualityPerInstallment,
+              loyalty_discount_value: loyaltyPerInstallment
             });
           }
         });

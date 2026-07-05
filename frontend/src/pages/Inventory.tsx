@@ -569,20 +569,30 @@ export default function Inventory() {
                     Aplicar Desconto de Pontualidade
                   </label>
                   {formData.punctuality_discount_active && (
-                    <div style={{ display: 'flex', alignItems: 'center', gap: '1.5rem', flexWrap: 'wrap' }}>
-                      <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
-                        <span style={{ fontSize: '0.9rem', color: 'var(--text-muted)' }}>Desconto (%):</span>
-                        <input type="number" min="0" max="100" step="0.1" value={formData.punctuality_discount_percent || 0} onChange={e => setFormData({...formData, punctuality_discount_percent: Number(e.target.value)})} style={{ width: '80px', padding: '0.5rem' }} />
-                        <span style={{ fontSize: '0.9rem', color: 'var(--text-muted)' }}>%</span>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '1.5rem', flexWrap: 'wrap' }}>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                          <span style={{ fontSize: '0.9rem', color: 'var(--text-muted)' }}>Desconto (%):</span>
+                          <input type="number" min="0" max="100" step="0.01" value={formData.punctuality_discount_percent || 0} onChange={e => {
+                            const percent = Number(e.target.value);
+                            const basePrice = formData.price_credit || 0;
+                            const value = basePrice > 0 ? (percent / 100) * basePrice : 0;
+                            setFormData({...formData, punctuality_discount_percent: percent, punctuality_discount_value: value});
+                          }} style={{ width: '80px', padding: '0.5rem', borderRadius: '4px', border: '1px solid var(--border-color)', background: 'var(--bg-lighter)', color: 'var(--text-main)' }} />
+                          <span style={{ fontSize: '0.9rem', color: 'var(--text-muted)' }}>%</span>
+                        </div>
+                        
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                          <span style={{ fontSize: '0.9rem', color: 'var(--text-muted)' }}>Desconto Fixo (R$):</span>
+                          <input type="text" value={maskCurrency(formData.punctuality_discount_value || 0)} onChange={e => {
+                            const value = parseCurrency(e.target.value);
+                            const basePrice = formData.price_credit || 0;
+                            const percent = basePrice > 0 ? (value / basePrice) * 100 : 0;
+                            setFormData({...formData, punctuality_discount_value: value, punctuality_discount_percent: Number(percent.toFixed(2))});
+                          }} style={{ width: '100px', padding: '0.5rem', borderRadius: '4px', border: '1px solid var(--border-color)', background: 'var(--bg-lighter)', color: 'var(--text-main)' }} />
+                        </div>
                       </div>
-                      
-                      <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
-                        <span style={{ fontSize: '0.9rem', color: 'var(--text-muted)' }}>Desconto Fixo (R$):</span>
-                        <input type="text" value={maskCurrency(formData.punctuality_discount_value || 0)} onChange={e => setFormData({...formData, punctuality_discount_value: parseCurrency(e.target.value)})} style={{ width: '100px', padding: '0.5rem' }} />
-                      </div>
-                    </div>
-                  )}
-                </div>
+                    )}
+                  </div>
                 
                 {settingsData?.loyalty_active && (
                   <div style={{ marginTop: '0.8rem', display: 'flex', flexDirection: 'column', gap: '0.8rem', background: 'rgba(255,255,255,0.02)', padding: '1rem', borderRadius: '8px', border: '1px solid rgba(255,255,255,0.05)' }}>
@@ -594,13 +604,23 @@ export default function Inventory() {
                       <div style={{ display: 'flex', alignItems: 'center', gap: '1.5rem', flexWrap: 'wrap' }}>
                         <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
                           <span style={{ fontSize: '0.9rem', color: 'var(--text-muted)' }}>Desconto (%):</span>
-                          <input type="number" min="0" max="100" step="0.1" value={formData.loyalty_discount_percent || 0} onChange={e => setFormData({...formData, loyalty_discount_percent: Number(e.target.value)})} style={{ width: '80px', padding: '0.5rem' }} />
+                          <input type="number" min="0" max="100" step="0.01" value={formData.loyalty_discount_percent || 0} onChange={e => {
+                            const percent = Number(e.target.value);
+                            const basePrice = formData.price_credit || 0;
+                            const value = basePrice > 0 ? (percent / 100) * basePrice : 0;
+                            setFormData({...formData, loyalty_discount_percent: percent, loyalty_discount_value: value});
+                          }} style={{ width: '80px', padding: '0.5rem', borderRadius: '4px', border: '1px solid var(--border-color)', background: 'var(--bg-lighter)', color: 'var(--text-main)' }} />
                           <span style={{ fontSize: '0.9rem', color: 'var(--text-muted)' }}>%</span>
                         </div>
                         
                         <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
                           <span style={{ fontSize: '0.9rem', color: 'var(--text-muted)' }}>Desconto Fixo (R$):</span>
-                          <input type="text" value={maskCurrency(formData.loyalty_discount_value || 0)} onChange={e => setFormData({...formData, loyalty_discount_value: parseCurrency(e.target.value)})} style={{ width: '100px', padding: '0.5rem' }} />
+                          <input type="text" value={maskCurrency(formData.loyalty_discount_value || 0)} onChange={e => {
+                            const value = parseCurrency(e.target.value);
+                            const basePrice = formData.price_credit || 0;
+                            const percent = basePrice > 0 ? (value / basePrice) * 100 : 0;
+                            setFormData({...formData, loyalty_discount_value: value, loyalty_discount_percent: Number(percent.toFixed(2))});
+                          }} style={{ width: '100px', padding: '0.5rem', borderRadius: '4px', border: '1px solid var(--border-color)', background: 'var(--bg-lighter)', color: 'var(--text-main)' }} />
                         </div>
                       </div>
                     )}

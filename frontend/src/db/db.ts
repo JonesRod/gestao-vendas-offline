@@ -96,6 +96,8 @@ export interface Installment {
   number: number;
   total: number;
   productName: string; // Para o cliente e lojista saberem do que é essa parcela (ou 'Vários' se agrupar)
+  punctuality_discount_value?: number;
+  loyalty_discount_value?: number;
   sale?: any;
 }
 
@@ -147,7 +149,7 @@ export interface Settings {
   email_token?: string;
   email_sender?: string;
   punctuality_discount_active?: boolean;
-  punctuality_discount_percent?: number;
+  punctuality_discount_days?: number;
   online_payment_active?: boolean;
   payment_gateway?: string;
   payment_api_key?: string;

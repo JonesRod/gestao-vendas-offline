@@ -9,6 +9,12 @@ export default function StoreProfile() {
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [message, setMessage] = useState({ text: '', type: '' });
+  const [creditInfo, setCreditInfo] = useState({
+    limit: 0,
+    used: 0,
+    is_blocked: false,
+    status: ''
+  });
   
   const [formData, setFormData] = useState({
     name: '',
@@ -43,6 +49,12 @@ export default function StoreProfile() {
             neighborhood: d.neighborhood || '',
             city: d.city || '',
             state: d.state || ''
+          });
+          setCreditInfo({
+            limit: d.credit_limit || 0,
+            used: d.credit_used || 0,
+            is_blocked: d.is_blocked || false,
+            status: d.status || 'ativo'
           });
         }
       } catch (err) {
@@ -127,6 +139,47 @@ export default function StoreProfile() {
           {message.text}
         </div>
       )}
+
+      <div className="profile-form glass-panel" style={{ marginBottom: '2rem' }}>
+        <div className="form-section" style={{ background: 'rgba(46, 204, 113, 0.05)', border: '1px solid rgba(46, 204, 113, 0.2)', padding: '1.5rem', borderRadius: '12px' }}>
+          <h3 style={{ color: 'var(--success)', marginBottom: '1rem', display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+            <CreditCard size={20} /> Meu Crediário
+          </h3>
+          
+          <div className="form-grid">
+            <div style={{ background: 'var(--bg-main)', padding: '1rem', borderRadius: '8px' }}>
+              <span style={{ display: 'block', fontSize: '0.85rem', color: 'var(--text-muted)', marginBottom: '0.3rem' }}>Status do Crediário</span>
+              <strong className={creditInfo.is_blocked ? 'text-danger' : 'text-success'} style={{ fontSize: '1.1rem' }}>
+                {creditInfo.is_blocked ? 'BLOQUEADO' : (creditInfo.limit > 0 ? 'ATIVO' : 'INATIVO')}
+              </strong>
+            </div>
+            
+            {creditInfo.limit > 0 ? (
+              <>
+                <div style={{ background: 'var(--bg-main)', padding: '1rem', borderRadius: '8px' }}>
+                  <span style={{ display: 'block', fontSize: '0.85rem', color: 'var(--text-muted)', marginBottom: '0.3rem' }}>Limite Total</span>
+                  <strong style={{ fontSize: '1.1rem', color: 'var(--text-primary)' }}>
+                    R$ {creditInfo.limit.toLocaleString('pt-BR', {minimumFractionDigits: 2})}
+                  </strong>
+                </div>
+                <div style={{ background: 'var(--bg-main)', padding: '1rem', borderRadius: '8px' }}>
+                  <span style={{ display: 'block', fontSize: '0.85rem', color: 'var(--text-muted)', marginBottom: '0.3rem' }}>Crédito Disponível</span>
+                  <strong className={(creditInfo.limit - creditInfo.used) <= 0 ? 'text-danger' : 'text-success'} style={{ fontSize: '1.1rem' }}>
+                    R$ {(creditInfo.limit - creditInfo.used).toLocaleString('pt-BR', {minimumFractionDigits: 2})}
+                  </strong>
+                </div>
+              </>
+            ) : (
+              <div style={{ background: 'var(--bg-main)', padding: '1rem', borderRadius: '8px', gridColumn: 'span 2' }}>
+                <span style={{ display: 'block', fontSize: '0.85rem', color: 'var(--text-muted)', marginBottom: '0.3rem' }}>Aviso</span>
+                <span style={{ fontSize: '0.95rem', color: 'var(--text-secondary)' }}>
+                  Você ainda não possui limite de crédito aprovado para compras a prazo.
+                </span>
+              </div>
+            )}
+          </div>
+        </div>
+      </div>
 
       <form className="profile-form glass-panel" onSubmit={handleSubmit}>
         <div className="form-section">

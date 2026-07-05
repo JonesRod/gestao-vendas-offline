@@ -169,3 +169,26 @@
   color: var(--text-muted);
   border-top: 1px solid var(--border-color);
 }
+
+@media (max-width: 768px) {
+  .header-content {
+    gap: 0.5rem;
+  }
+  .store-logo {
+    font-size: 1.2rem;
+    gap: 0.4rem;
+  }
+  .store-actions {
+    gap: 0.5rem;
+  }
+  .user-greeting {
+    display: none;
+  }
+  .store-nav .nav-link {
+    padding: 0.4rem;
+    font-size: 0.9rem;
+  }
+  .user-menu .dropdown {
+    right: -10px;
+  }
+}

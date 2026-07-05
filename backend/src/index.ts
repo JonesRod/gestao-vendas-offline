@@ -129,8 +129,79 @@ app.delete('/api/products/:id', async (req, res) => {
 
 // Routes for Sales
 app.get('/api/sales', async (req, res) => {
-  const sales = await prisma.sale.findMany({ include: { items: { include: { product: true } }, installments: true } });
+  const { customerId } = req.query;
+  const whereClause = customerId ? { customerId: Number(customerId) } : {};
+  const sales = await prisma.sale.findMany({ 
+    where: whereClause,
+    include: { items: { include: { product: true } }, installments: true, customer: true },
+    orderBy: { date: 'desc' }
+  });
   res.json(sales);
+});
+
+app.put('/api/sales/:id/status', async (req, res) => {
+  const { id } = req.params;
+  const { status } = req.body;
+  
+  try {
+    const sale = await prisma.sale.findUnique({
+      where: { id: Number(id) },
+      include: { items: true, installments: true }
+    });
+
+    if (!sale) return res.status(404).json({ error: 'Pedido não encontrado' });
+
+    // Cancelar pedido
+    if (status === 'cancelled' && sale.status !== 'cancelled') {
+      await prisma.$transaction(async (tx) => {
+        // Voltar estoque
+        for (const item of sale.items) {
+          const product = await tx.product.findUnique({ where: { id: item.productId }});
+          if (product) {
+            await tx.product.update({
+              where: { id: product.id },
+              data: { stock: product.stock + item.quantity }
+            });
+          }
+        }
+
+        // Devolver limite de crédito
+        if (sale.customerId && sale.paymentMethod.includes('credit')) {
+          const customer = await tx.customer.findUnique({ where: { id: sale.customerId }});
+          if (customer) {
+            const sumInstallments = sale.installments.reduce((acc, inst) => acc + inst.amount, 0);
+            await tx.customer.update({
+              where: { id: customer.id },
+              data: { credit_used: Math.max(0, customer.credit_used - sumInstallments) }
+            });
+          }
+        }
+
+        // Cancelar parcelas pendentes
+        await tx.installment.updateMany({
+          where: { saleId: sale.id, status: 'pending' },
+          data: { status: 'cancelled' }
+        });
+
+        // Atualizar status da venda
+        await tx.sale.update({
+          where: { id: sale.id },
+          data: { status: 'cancelled' }
+        });
+      });
+      return res.json({ success: true, message: 'Pedido cancelado' });
+    }
+
+    // Apenas atualizar o status para outros (ex: completed)
+    const updatedSale = await prisma.sale.update({
+      where: { id: Number(id) },
+      data: { status }
+    });
+    res.json(updatedSale);
+  } catch (error) {
+    console.error(error);
+    res.status(500).json({ error: 'Erro ao atualizar status do pedido' });
+  }
 });
 
 app.post('/api/sales', async (req, res) => {
@@ -303,6 +374,11 @@ app.get('/api/installments', async (req, res) => {
     include: { sale: true }
   });
   res.json(installments);
+});
+
+app.post('/api/installments', async (req, res) => {
+  const installment = await prisma.installment.create({ data: req.body });
+  res.json(installment);
 });
 
 app.put('/api/installments/:id', async (req, res) => {
@@ -522,7 +598,8 @@ app.post('/api/auth/login', async (req, res) => {
     if (!userToLog) return res.status(500).json({ error: 'Erro interno ao resolver usuário' });
 
     const token = jwt.sign({ id: userToLog.id, role: singleRole }, JWT_SECRET, { expiresIn: '7d' });
-    return res.json({ token, role: singleRole, user: { id: userToLog.id, name: userToLog.name, cpf: userToLog.cpf } });
+    const { password: _, ...safeUserToLog } = userToLog;
+    return res.json({ token, role: singleRole, user: safeUserToLog });
   }
 
   if (!validRoles.includes(role)) {
@@ -534,7 +611,8 @@ app.post('/api/auth/login', async (req, res) => {
   }
 
   const token = jwt.sign({ id: userDetails.id, role }, JWT_SECRET, { expiresIn: '7d' });
-  return res.json({ token, role, user: { id: userDetails.id, name: userDetails.name, cpf: userDetails.cpf } });
+  const { password: _, ...safeUserDetails } = userDetails;
+  return res.json({ token, role, user: safeUserDetails });
 });
 
 // Recuperação de senha simulada
@@ -563,6 +641,32 @@ app.post('/api/auth/reset-password', async (req, res) => {
   }
 
   res.json({ success: true });
+});
+
+// Settings Routes
+app.get('/api/settings', async (req, res) => {
+  let settings = await prisma.settings.findFirst();
+  if (!settings) {
+    // Retorna defaults se nao existir
+    return res.json({});
+  }
+  res.json(settings);
+});
+
+app.put('/api/settings', async (req, res) => {
+  const data = req.body;
+  
+  // Como só temos 1 registro de settings globalmente
+  let settings = await prisma.settings.findFirst();
+  if (!settings) {
+    settings = await prisma.settings.create({ data });
+  } else {
+    settings = await prisma.settings.update({
+      where: { id: settings.id },
+      data
+    });
+  }
+  res.json(settings);
 });
 
 const PORT = process.env.PORT || 3000;

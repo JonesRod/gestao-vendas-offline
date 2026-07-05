@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react';
 import { Save, ShieldCheck } from 'lucide-react';
 import { useLiveQuery } from 'dexie-react-hooks';
 import { db, type Settings as SettingsType } from '../db/db';
+import { api } from '../services/api';
 import { maskCNPJ, maskPhone, maskCEP, fetchAddressByCep, maskDate } from '../utils/masks';
 import './Settings.css';
 
@@ -59,6 +60,13 @@ export default function Settings() {
       } else {
         await db.settings.update(1, dataToSave);
       }
+
+      try {
+        await api.put('/settings', dataToSave);
+      } catch (apiErr) {
+        console.error('Falha ao sincronizar configurações com o servidor:', apiErr);
+      }
+      
       
       setIsSaved(true);
       setTimeout(() => setIsSaved(false), 3000);
@@ -168,16 +176,42 @@ export default function Settings() {
               <p>Perda de fidelidade caso o cliente fique sem comprar por X dias.</p>
             </div>
             <div className={`rule-body ${!formData.loyalty_active ? 'disabled' : ''}`}>
-              <div className="form-group">
-                <label>Dias de Inatividade Permitidos</label>
-                <div style={{display: 'flex', alignItems: 'center', gap: '0.5rem'}}>
-                  <input type="number" min="1" value={formData.loyalty_days} onChange={e => setFormData({...formData, loyalty_days: Number(e.target.value)})} disabled={!formData.loyalty_active} style={{maxWidth: '120px'}} />
-                  <span>dias</span>
+              <div className="form-row">
+                <div className="form-group">
+                  <label>Dias de Inatividade Permitidos</label>
+                  <div style={{display: 'flex', alignItems: 'center', gap: '0.5rem'}}>
+                    <input type="number" min="1" value={formData.loyalty_days} onChange={e => setFormData({...formData, loyalty_days: Number(e.target.value)})} disabled={!formData.loyalty_active} style={{maxWidth: '120px'}} />
+                    <span>dias</span>
+                  </div>
                 </div>
               </div>
+              <p style={{ fontSize: '0.85rem', color: 'var(--text-muted)' }}>* Os valores de desconto de cliente fiel devem ser configurados individualmente dentro do cadastro de cada produto.</p>
             </div>
           </div>
-
+          <div className="rule-section">
+            <div className="rule-header">
+              <div className="rule-title">
+                <h4>Desconto de Pontualidade Global</h4>
+                <label className="toggle-switch">
+                  <input type="checkbox" checked={formData.punctuality_discount_active || false} onChange={e => setFormData({...formData, punctuality_discount_active: e.target.checked})} />
+                  <span className="slider"></span>
+                </label>
+              </div>
+              <p>Aplicar desconto se o cliente pagar a parcela até a data de vencimento.</p>
+            </div>
+            <div className={`rule-body ${!formData.punctuality_discount_active ? 'disabled' : ''}`}>
+              <div className="form-row">
+                <div className="form-group">
+                  <label>Dias de Tolerância para Desconto</label>
+                  <div style={{display: 'flex', alignItems: 'center', gap: '0.5rem'}}>
+                    <input type="number" min="0" value={formData.punctuality_discount_days || 0} onChange={e => setFormData({...formData, punctuality_discount_days: Number(e.target.value)})} disabled={!formData.punctuality_discount_active} style={{maxWidth: '120px'}} />
+                    <span>dias</span>
+                  </div>
+                </div>
+              </div>
+              <p style={{ fontSize: '0.85rem', color: 'var(--text-muted)' }}>* Os valores de desconto de pontualidade devem ser configurados individualmente dentro do cadastro de cada produto.</p>
+            </div>
+          </div>
 
           <div className="rule-section">
             <div className="rule-header">

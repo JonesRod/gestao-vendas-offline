@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { NavLink, useNavigate } from 'react-router-dom';
-import { LayoutDashboard, ShoppingCart, Users, Package, Settings, Store, Briefcase, FileText, Receipt, Palette, Moon, Sun, Menu, X, LogOut, ChevronLeft, ChevronRight, PackagePlus, DollarSign, Truck } from 'lucide-react';
+import { LayoutDashboard, ShoppingCart, Users, Package, Settings, Store, Briefcase, FileText, Receipt, Palette, Moon, Sun, Menu, X, LogOut, ChevronLeft, ChevronRight, PackagePlus, DollarSign, Truck, ShoppingBag } from 'lucide-react';
 import Modal from './Modal';
 import { useAuth } from '../contexts/AuthContext';
 import './Sidebar.css';
@@ -9,6 +9,7 @@ const navItems = [
   { path: '/dashboard', label: 'Dashboard', icon: LayoutDashboard },
   { path: '/pos', label: 'Ponto de Venda', icon: ShoppingCart },
   { path: '/receipts', label: 'Receber Conta', icon: Receipt },
+  { path: '/orders', label: 'Pedidos', icon: ShoppingBag },
   { path: '/customers', label: 'Clientes', icon: Users },
   { path: '/inventory', label: 'Produtos', icon: Package },
   { path: '/stock-entries', label: 'Entrada de Estoque', icon: PackagePlus },

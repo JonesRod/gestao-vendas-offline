@@ -120,9 +120,11 @@ model Installment {
   amount      Float
   due_date    DateTime
   status      String
-  number      Int
-  total       Int
-  productName String
+  number       Int
+  total        Int
+  productName  String
+  punctuality_discount_value Float? @default(0)
+  loyalty_discount_value     Float? @default(0)
 
   customer Customer @relation(fields: [customerId], references: [id])
   sale     Sale     @relation(fields: [saleId], references: [id])
@@ -183,6 +185,12 @@ model Settings {
 
   loyalty_active Boolean
   loyalty_days   Int
+  loyalty_discount_percent Float? @default(0)
+  loyalty_discount_value   Float? @default(0)
+
+  punctuality_discount_active  Boolean? @default(false)
+  punctuality_discount_percent Float?   @default(0)
+  punctuality_discount_days    Int?     @default(0)
 
   penalty_active   Boolean
   penalty_percent  Float
