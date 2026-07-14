@@ -190,3 +190,27 @@
   background: var(--primary);
   color: white;
 }
+
+@media (max-width: 768px) {
+  .hero-section {
+    padding: 1.5rem;
+    text-align: center;
+  }
+  .hero-content {
+    max-width: 100%;
+    position: relative;
+    z-index: 2;
+  }
+  .hero-content h1 {
+    font-size: 1.8rem;
+  }
+  .hero-content p {
+    font-size: 1rem;
+  }
+  .hero-icon {
+    right: 50%;
+    transform: translate(50%, -50%);
+    opacity: 0.05;
+    z-index: 1;
+  }
+}
