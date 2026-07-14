@@ -23,6 +23,12 @@ export default function Inventory() {
   const [formData, setFormData] = useState<Partial<Product>>(initialFormState);
   
   const [products, setProducts] = useState<Product[]>([]);
+  const [categories, setCategories] = useState<{id: number; name: string}[]>([]);
+  const [isCategoryModalOpen, setIsCategoryModalOpen] = useState(false);
+  const [newCategoryName, setNewCategoryName] = useState('');
+  const [editingCategoryId, setEditingCategoryId] = useState<number | null>(null);
+  const [editingCategoryName, setEditingCategoryName] = useState('');
+  const [categoryToDelete, setCategoryToDelete] = useState<number | null>(null);
 
   const fetchProducts = async () => {
     try {
@@ -33,8 +39,18 @@ export default function Inventory() {
     }
   };
 
+  const fetchCategories = async () => {
+    try {
+      const { data } = await api.get('/categories');
+      setCategories(data);
+    } catch (error) {
+      console.error("Erro ao buscar categorias", error);
+    }
+  };
+
   useEffect(() => {
     fetchProducts();
+    fetchCategories();
   }, []);
 
   const openModal = (type: 'product' | 'kit') => {
@@ -148,6 +164,40 @@ export default function Inventory() {
     });
   };
 
+  const handleAddCategory = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!newCategoryName.trim()) return;
+    try {
+      await api.post('/categories', { name: newCategoryName });
+      setNewCategoryName('');
+      fetchCategories();
+    } catch (error) {
+      console.error("Erro ao adicionar categoria", error);
+    }
+  };
+
+  const handleEditCategory = async (id: number) => {
+    if (!editingCategoryName.trim()) return;
+    try {
+      await api.put(`/categories/${id}`, { name: editingCategoryName });
+      setEditingCategoryId(null);
+      setEditingCategoryName('');
+      fetchCategories();
+    } catch (error) {
+      console.error("Erro ao editar categoria", error);
+    }
+  };
+
+  const handleDeleteCategory = async (id: number) => {
+    try {
+      await api.delete(`/categories/${id}`);
+      fetchCategories();
+    } catch (error) {
+      console.error("Erro ao excluir categoria", error);
+    }
+  };
+
+
   const removeImage = (index: number) => {
     setFormData(prev => ({
       ...prev,
@@ -202,9 +252,26 @@ export default function Inventory() {
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    
+    let finalCategoryId = formData.categoryId || null;
+    if (modalType === 'kit') {
+      let kitCategory = categories.find(c => c.name.toLowerCase() === 'kit' || c.name.toLowerCase() === 'kits');
+      if (!kitCategory) {
+        try {
+          const { data } = await api.post('/categories', { name: 'Kits' });
+          kitCategory = data;
+          fetchCategories();
+        } catch (error) {
+          console.error("Erro ao criar categoria Kits", error);
+        }
+      }
+      finalCategoryId = kitCategory ? kitCategory.id : null;
+    }
+
     const productData = {
       name: formData.name!,
       description: formData.description,
+      categoryId: finalCategoryId,
       cost: modalType === 'kit' ? kitItemsWithDetails.reduce((sum, i) => sum + ((i.product?.cost || 0) * i.quantity), 0) : (Number(formData.cost) || 0),
       margin_cash: modalType === 'kit' ? 0 : (Number(formData.margin_cash) || 0),
       margin_credit: modalType === 'kit' ? 0 : (Number(formData.margin_credit) || 0),
@@ -399,6 +466,33 @@ export default function Inventory() {
             <label>Descrição</label>
             <textarea rows={2} value={formData.description} onChange={e => setFormData({...formData, description: e.target.value})} />
           </div>
+
+          {modalType === 'product' && (
+            <div className="form-group">
+              <label>Categoria</label>
+              <div style={{ display: 'flex', gap: '0.5rem', alignItems: 'center' }}>
+                <select 
+                  value={formData.categoryId || ''} 
+                  onChange={e => setFormData({...formData, categoryId: e.target.value ? Number(e.target.value) : undefined})}
+                  style={{ flex: 1 }}
+                >
+                  <option value="">Selecione uma categoria...</option>
+                  {categories.map(cat => (
+                    <option key={cat.id} value={cat.id}>{cat.name}</option>
+                  ))}
+                </select>
+                <button 
+                  type="button" 
+                  onClick={() => setIsCategoryModalOpen(true)}
+                  className="btn-icon"
+                  style={{ padding: '0.6rem', background: 'rgba(99, 102, 241, 0.1)', color: 'var(--primary)', borderRadius: '8px' }}
+                  title="Gerenciar Categorias"
+                >
+                  <Plus size={20} />
+                </button>
+              </div>
+            </div>
+          )}
 
           {modalType === 'kit' && (
             <div className="kit-builder-section">
@@ -651,13 +745,80 @@ export default function Inventory() {
         </form>
       </Modal>
 
+      <Modal isOpen={isCategoryModalOpen} onClose={() => setIsCategoryModalOpen(false)} title="Gerenciar Categorias">
+        <div style={{ marginBottom: '1.5rem', paddingBottom: '1.5rem', borderBottom: '1px solid var(--border-color)' }}>
+          <form onSubmit={handleAddCategory} style={{ display: 'flex', gap: '0.8rem', alignItems: 'flex-end' }}>
+            <div className="form-group" style={{ flex: 1, margin: 0 }}>
+              <label style={{ marginBottom: '0.5rem', display: 'block', fontSize: '0.9rem', color: 'var(--text-muted)' }}>Nova Categoria</label>
+              <input 
+                type="text" 
+                placeholder="Ex: Eletrônicos, Roupas..." 
+                value={newCategoryName}
+                onChange={e => setNewCategoryName(e.target.value)}
+                style={{ width: '100%' }}
+              />
+            </div>
+            <button type="submit" className="btn-primary" style={{ height: '42px', padding: '0 1.5rem' }}>
+              Adicionar
+            </button>
+          </form>
+        </div>
+
+        <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem', maxHeight: '300px', overflowY: 'auto' }}>
+          {categories.length === 0 ? (
+            <p style={{ color: 'var(--text-muted)', textAlign: 'center', padding: '1rem 0' }}>Nenhuma categoria cadastrada.</p>
+          ) : (
+            categories.map(cat => (
+              <div key={cat.id} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '0.8rem', background: 'var(--bg-card)', borderRadius: '8px', border: '1px solid var(--border-color)' }}>
+                {editingCategoryId === cat.id ? (
+                  <div style={{ display: 'flex', gap: '0.5rem', flex: 1, marginRight: '1rem' }}>
+                    <input 
+                      type="text" 
+                      value={editingCategoryName}
+                      onChange={e => setEditingCategoryName(e.target.value)}
+                      style={{ flex: 1, padding: '0.4rem', borderRadius: '4px', border: '1px solid var(--primary)', background: 'transparent', color: 'var(--text-main)' }}
+                      autoFocus
+                    />
+                    <button type="button" onClick={() => handleEditCategory(cat.id)} className="btn-primary" style={{ padding: '0 0.8rem' }}>Salvar</button>
+                    <button type="button" onClick={() => { setEditingCategoryId(null); setEditingCategoryName(''); }} className="btn-secondary" style={{ padding: '0 0.8rem' }}>Cancelar</button>
+                  </div>
+                ) : (
+                  <>
+                    <span>{cat.name}</span>
+                    <div style={{ display: 'flex', gap: '0.5rem' }}>
+                      <button type="button" className="btn-icon" onClick={() => { setEditingCategoryId(cat.id); setEditingCategoryName(cat.name); }}>
+                        <Edit size={16} />
+                      </button>
+                      <button type="button" className="btn-icon danger" onClick={() => setCategoryToDelete(cat.id)}>
+                        <Trash2 size={16} />
+                      </button>
+                    </div>
+                  </>
+                )}
+              </div>
+            ))
+          )}
+        </div>
+      </Modal>
+
       <Modal isOpen={deleteConfirmId !== null} onClose={cancelDelete} title="Confirmar Exclusão">
-        <div style={{ padding: '1rem' }}>
-          <p style={{ marginBottom: '2rem', fontSize: '1.05rem', color: 'var(--text-main)' }}>Tem certeza que deseja excluir este item?</p>
-          <div className="form-actions">
-            <button type="button" className="btn-secondary" onClick={cancelDelete}>Cancelar</button>
-            <button type="button" className="btn-primary" style={{ background: 'var(--danger)' }} onClick={confirmDelete}>Excluir</button>
-          </div>
+        <p>Tem certeza que deseja excluir este item? Esta ação não pode ser desfeita.</p>
+        <div style={{display: 'flex', gap: '1rem', marginTop: '2rem'}}>
+          <button className="btn-secondary" style={{flex: 1}} onClick={cancelDelete}>Cancelar</button>
+          <button className="btn-primary" style={{flex: 1, background: 'var(--danger)'}} onClick={confirmDelete}>Excluir</button>
+        </div>
+      </Modal>
+
+      <Modal isOpen={categoryToDelete !== null} onClose={() => setCategoryToDelete(null)} title="Excluir Categoria">
+        <p>Tem certeza que deseja excluir esta categoria? Os produtos vinculados a ela ficarão sem categoria.</p>
+        <div style={{display: 'flex', gap: '1rem', marginTop: '2rem'}}>
+          <button className="btn-secondary" style={{flex: 1}} onClick={() => setCategoryToDelete(null)}>Cancelar</button>
+          <button className="btn-primary" style={{flex: 1, background: 'var(--danger)'}} onClick={() => {
+            if (categoryToDelete !== null) {
+              handleDeleteCategory(categoryToDelete);
+              setCategoryToDelete(null);
+            }
+          }}>Excluir</button>
         </div>
       </Modal>
     </div>

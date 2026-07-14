@@ -42,9 +42,35 @@ app.delete('/api/customers/:id', async (req, res) => {
   res.json({ success: true });
 });
 
+// Routes for Categories
+app.get('/api/categories', async (req, res) => {
+  const categories = await prisma.category.findMany();
+  res.json(categories);
+});
+
+app.post('/api/categories', async (req, res) => {
+  const category = await prisma.category.create({ data: req.body });
+  res.json(category);
+});
+
+app.put('/api/categories/:id', async (req, res) => {
+  const { id } = req.params;
+  const category = await prisma.category.update({
+    where: { id: Number(id) },
+    data: req.body
+  });
+  res.json(category);
+});
+
+app.delete('/api/categories/:id', async (req, res) => {
+  const { id } = req.params;
+  await prisma.category.delete({ where: { id: Number(id) } });
+  res.json({ success: true });
+});
+
 // Routes for Products
 app.get('/api/products', async (req, res) => {
-  const products = await prisma.product.findMany({ include: { kitItemsParent: true } });
+  const products = await prisma.product.findMany({ include: { kitItemsParent: true, category: true } });
   res.json(products.map(p => ({
     ...p,
     images: p.images ? JSON.parse(p.images) : [],

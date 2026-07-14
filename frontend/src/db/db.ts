@@ -58,6 +58,8 @@ export interface Product {
   is_active?: boolean;
   images?: string[];
   type: 'product' | 'kit';
+  categoryId?: number;
+  category?: { id: number, name: string };
   is_promotional?: boolean;
   promo_price_cash?: number;
   promo_price_credit?: number;
