@@ -43,6 +43,14 @@ model Customer {
   onlineOrders OnlineOrder[]
 }
 
+model Category {
+  id         Int       @id @default(autoincrement())
+  name       String    @unique
+  created_at DateTime  @default(now())
+
+  products   Product[]
+}
+
 model Product {
   id                           Int      @id @default(autoincrement())
   name                         String
@@ -56,6 +64,8 @@ model Product {
   is_active                    Boolean  @default(true)
   images                       String?
   type                         String
+  categoryId                   Int?
+  category                     Category? @relation(fields: [categoryId], references: [id])
   allow_credit                 Boolean?
   max_installments             Int?
   punctuality_discount_active  Boolean? @default(false)
