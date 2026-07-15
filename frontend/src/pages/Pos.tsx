@@ -146,11 +146,17 @@ Obrigado pela preferência!`;
     setCart(cart.map(item => item.id === id ? { ...item, selected_installments } : item));
   };
 
+  const updateItemDiscount = (id: number, discountStr: string) => {
+    const val = discountStr.replace(/[^0-9.,]/g, '');
+    setCart(cart.map(item => item.id === id ? { ...item, discount: val } : item));
+  };
+
   const isCreditSale = 'cartao_credito' in splitPayments || 'fiado' in splitPayments;
 
   const currentTotal = cart.reduce((sum, item) => {
     const price = !isCreditSale ? item.price_cash : item.price_credit;
-    return sum + (price * item.quantity);
+    const discount = parseFloat(item.discount?.replace(',', '.') || '0');
+    return sum + (price * item.quantity) - discount;
   }, 0);
 
   useEffect(() => {
@@ -298,14 +304,17 @@ Obrigado pela preferência!`;
         totalAmount: currentTotal,
         paymentMethod: finalPaymentMethodStr,
         status: isFiado ? 'pending' : 'paid',
-        date: new Date(saleDate + 'T12:00:00Z'),
-        due_date: isFiado ? new Date(dueDate) : undefined,
-        invoice_number: manualInvoiceNumber || undefined,
-        items: cart.map(item => ({
-          productId: item.id,
-          quantity: item.quantity,
-          price_applied: !isCreditSale ? item.price_cash : item.price_credit
-        })),
+        items: cart.map(item => {
+          const discount = parseFloat(item.discount?.replace(',', '.') || '0');
+          const basePrice = !isFiado ? item.price_cash : item.price_credit;
+          const finalUnitPrice = (basePrice * item.quantity - discount) / item.quantity;
+          return {
+            productId: item.id,
+            quantity: item.quantity,
+            unitPrice: finalUnitPrice
+          };
+        }),
+        date: new Date(saleDate).toISOString(),
         installments: allInstallments
       };
 
@@ -526,6 +535,7 @@ Obrigado pela preferência!`;
                   <th style={{ width: '60px' }}>Qtd</th>
                   <th>Produto</th>
                   <th>Valor Unit.</th>
+                  <th>Desc. (R$)</th>
                   {isCreditSale && <th>Parcelas</th>}
                   <th>Total</th>
                   <th style={{ width: '40px' }}></th>
@@ -534,7 +544,7 @@ Obrigado pela preferência!`;
               <tbody>
                 {cart.length === 0 ? (
                   <tr>
-                    <td colSpan={6} className="empty-cart-row">
+                    <td colSpan={isCreditSale ? 7 : 6} className="empty-cart-row">
                       <ShoppingCart size={32} />
                       <p>Adicione itens à venda atual</p>
                     </td>
@@ -542,6 +552,8 @@ Obrigado pela preferência!`;
                 ) : (
                   cart.map(item => {
                     const itemPrice = !isCreditSale ? item.price_cash : item.price_credit;
+                    const discount = parseFloat(item.discount?.replace(',', '.') || '0');
+                    const totalItem = (itemPrice * item.quantity) - discount;
                     return (
                       <tr key={item.id}>
                         <td>
@@ -553,6 +565,15 @@ Obrigado pela preferência!`;
                         </td>
                         <td className="product-name-cell">{item.name}</td>
                         <td>R$ {itemPrice.toLocaleString('pt-BR', {minimumFractionDigits: 2})}</td>
+                        <td>
+                          <input 
+                            type="text" 
+                            style={{ width: '70px', padding: '4px', borderRadius: '4px', border: '1px solid var(--border-color)', background: 'rgba(0,0,0,0.2)', color: 'var(--text-main)', textAlign: 'center', fontSize: '0.9rem' }} 
+                            value={item.discount || ''} 
+                            onChange={(e) => updateItemDiscount(item.id, e.target.value)}
+                            placeholder="0,00"
+                          />
+                        </td>
                         {isCreditSale && (
                           <td>
                             {item.allow_credit !== false ? (
@@ -570,7 +591,7 @@ Obrigado pela preferência!`;
                             )}
                           </td>
                         )}
-                        <td className="font-bold">R$ {(itemPrice * item.quantity).toLocaleString('pt-BR', {minimumFractionDigits: 2})}</td>
+                        <td className="font-bold">R$ {totalItem.toLocaleString('pt-BR', {minimumFractionDigits: 2})}</td>
                         <td>
                           <button className="btn-remove-item" onClick={() => setItemToDelete(item.id)}>
                             <Trash2 size={16} />

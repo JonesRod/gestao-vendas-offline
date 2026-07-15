@@ -10,6 +10,9 @@ export default function StoreHome() {
   const { user } = useAuth();
   const { addToCart } = useCart();
   const [products, setProducts] = useState<Product[]>([]);
+  const [categories, setCategories] = useState<{id: number, name: string}[]>([]);
+  const [filter, setFilter] = useState<string>('all');
+  const [favoriteProductIds, setFavoriteProductIds] = useState<number[]>([]);
   const [loading, setLoading] = useState(true);
   const [selectedProduct, setSelectedProduct] = useState<Product | null>(null);
   const [toastMessage, setToastMessage] = useState<string | null>(null);
@@ -23,21 +26,66 @@ export default function StoreHome() {
   const hasActiveCredit = user && user.credit_limit > 0 && !user.is_blocked;
 
   useEffect(() => {
-    const fetchProducts = async () => {
+    const fetchData = async () => {
       try {
-        const { data } = await api.get('/products');
-        setProducts(data);
+        const [productsRes, categoriesRes, salesRes] = await Promise.all([
+          api.get('/products'),
+          api.get('/categories'),
+          user ? api.get(`/sales?customerId=${user.id}`) : Promise.resolve({ data: [] })
+        ]);
+        setProducts(productsRes.data);
+        setCategories(categoriesRes.data);
+        
+        if (salesRes.data && salesRes.data.length > 0) {
+          const productCounts: Record<number, number> = {};
+          salesRes.data.forEach((sale: any) => {
+            if (sale.items) {
+              sale.items.forEach((item: any) => {
+                productCounts[item.productId] = (productCounts[item.productId] || 0) + item.quantity;
+              });
+            }
+          });
+          
+          const sortedProducts = Object.entries(productCounts)
+            .sort((a, b) => b[1] - a[1])
+            .map(entry => Number(entry[0]))
+            .slice(0, 10);
+            
+          setFavoriteProductIds(sortedProducts);
+        }
       } catch (error) {
-        console.error("Erro ao buscar produtos da loja", error);
+        console.error("Erro ao buscar dados da loja", error);
       } finally {
         setLoading(false);
       }
     };
-    fetchProducts();
-  }, []);
+    fetchData();
+  }, [user]);
 
-  const promoProducts = products.filter(p => p.is_promotional && p.is_active !== false);
-  const otherProducts = products.filter(p => !p.is_promotional && p.is_active !== false);
+  const filteredProducts = products.filter(p => {
+    if (p.is_active === false) return false;
+    if (filter === 'all') return true;
+    if (filter === 'favorites') return p.id && favoriteProductIds.includes(p.id);
+    if (filter === 'promo') return p.is_promotional === true;
+    if (filter.startsWith('cat_')) {
+      const catId = Number(filter.split('_')[1]);
+      return p.categoryId === catId;
+    }
+    return true;
+  });
+
+  const oneMonthAgo = new Date();
+  oneMonthAgo.setMonth(oneMonthAgo.getMonth() - 1);
+
+  const newProducts = filteredProducts.filter(p => {
+    if (!p.created_at) return false;
+    return new Date(p.created_at) >= oneMonthAgo;
+  });
+
+  const otherProducts = filteredProducts.filter(p => {
+    if (!p.created_at) return true;
+    return new Date(p.created_at) < oneMonthAgo;
+  });
 
   const renderProductCard = (product: Product, isPromo: boolean) => {
     const mainImage = product.images && product.images.length > 0 ? product.images[0] : null;
@@ -125,22 +173,45 @@ export default function StoreHome() {
         </div>
       ) : (
         <>
-          {promoProducts.length > 0 && (
-            <div className="products-preview" style={{ marginBottom: '4rem' }}>
-              <h2>Produtos em Destaque</h2>
-              <div className="products-grid">
-                {promoProducts.map(p => renderProductCard(p, true))}
-              </div>
+          <div className="search-filters glass-panel" style={{ marginBottom: '2rem', padding: '1rem', borderRadius: '12px', display: 'flex', justifyContent: 'center', overflowX: 'auto' }}>
+            <div className="filter-pills" style={{ margin: 0, justifyContent: 'center', width: '100%', flexWrap: 'wrap' }}>
+              <button className={`pill ${filter === 'all' ? 'active' : ''}`} onClick={() => setFilter('all')}>Todos</button>
+              <button className={`pill ${filter === 'promo' ? 'active' : ''}`} style={filter === 'promo' ? { background: 'var(--primary)', color: 'white', borderColor: 'var(--primary)' } : {}} onClick={() => setFilter('promo')}>Promoções</button>
+              {user && favoriteProductIds.length > 0 && (
+                <button className={`pill ${filter === 'favorites' ? 'active' : ''}`} style={filter === 'favorites' ? { background: 'var(--warning)', color: '#000', borderColor: 'var(--warning)' } : {}} onClick={() => setFilter('favorites')}>⭐ Favoritos</button>
+              )}
+              {categories.map(cat => (
+                <button key={`cat_${cat.id}`} className={`pill ${filter === `cat_${cat.id}` ? 'active' : ''}`} onClick={() => setFilter(`cat_${cat.id}`)}>{cat.name}</button>
+              ))}
             </div>
-          )}
+          </div>
           
-          {otherProducts.length > 0 && (
-            <div className="products-preview">
-              <h2>Nossos Produtos</h2>
-              <div className="products-grid">
-                {otherProducts.map(p => renderProductCard(p, false))}
-              </div>
+          {filteredProducts.length === 0 ? (
+            <div style={{ textAlign: 'center', padding: '4rem 1rem', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', background: 'rgba(255,255,255,0.02)', borderRadius: '12px', border: '1px dashed var(--border-color)', marginBottom: '2rem' }}>
+              <Package size={48} style={{ color: 'var(--text-muted)', marginBottom: '1rem', opacity: 0.5 }} />
+              <h3 style={{ color: 'var(--text-main)', marginBottom: '0.5rem' }}>Nenhum produto encontrado</h3>
+              <p style={{ color: 'var(--text-muted)' }}>Não existem produtos disponíveis para esta categoria no momento.</p>
             </div>
+          ) : (
+            <>
+              {newProducts.length > 0 && (
+                <div className="products-preview" style={{ marginBottom: '4rem' }}>
+                  <h2>Produtos em Destaque <span style={{fontSize: '0.9rem', color: 'var(--text-muted)', fontWeight: 'normal', marginLeft: '0.5rem'}}>(Novidades)</span></h2>
+                  <div className="products-grid">
+                    {newProducts.map(p => renderProductCard(p, !!p.is_promotional))}
+                  </div>
+                </div>
+              )}
+              
+              {otherProducts.length > 0 && (
+                <div className="products-preview">
+                  <h2>Nossos Produtos</h2>
+                  <div className="products-grid">
+                    {otherProducts.map(p => renderProductCard(p, !!p.is_promotional))}
+                  </div>
+                </div>
+              )}
+            </>
           )}
         </>
       )}

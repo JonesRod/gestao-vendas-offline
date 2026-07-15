@@ -10,7 +10,7 @@ import './Inventory.css';
 export default function Inventory() {
   const settingsData = useLiveQuery(() => db.settings.get(1));
   const [searchTerm, setSearchTerm] = useState('');
-  const [filter, setFilter] = useState<'all' | 'kits' | 'avulsos' | 'low' | 'promo'>('all');
+  const [filter, setFilter] = useState<string>('all');
   const [kitAvailableSearch, setKitAvailableSearch] = useState('');
   const [kitSelectedSearch, setKitSelectedSearch] = useState('');
   const [isModalOpen, setIsModalOpen] = useState(false);
@@ -318,6 +318,10 @@ export default function Inventory() {
     if (filter === 'avulsos') return p.type === 'product';
     if (filter === 'low') return p.stock <= 10;
     if (filter === 'promo') return p.is_promotional === true;
+    if (filter.startsWith('cat_')) {
+      const catId = Number(filter.split('_')[1]);
+      return p.categoryId === catId;
+    }
     return true;
   });
 
@@ -353,11 +357,21 @@ export default function Inventory() {
           <button className={`pill ${filter === 'avulsos' ? 'active' : ''}`} onClick={() => setFilter('avulsos')}>Avulsos</button>
           <button className={`pill ${filter === 'promo' ? 'active' : ''}`} style={filter === 'promo' ? { background: 'var(--primary)', color: 'white', borderColor: 'var(--primary)' } : {}} onClick={() => setFilter('promo')}>Em Promoção</button>
           <button className={`pill danger ${filter === 'low' ? 'active' : ''}`} onClick={() => setFilter('low')}>Estoque Baixo</button>
+          {categories.map(cat => (
+            <button key={`cat_${cat.id}`} className={`pill ${filter === `cat_${cat.id}` ? 'active' : ''}`} onClick={() => setFilter(`cat_${cat.id}`)}>{cat.name}</button>
+          ))}
         </div>
       </div>
 
       <div className="inventory-grid">
-        {filteredProducts.map((product: Product) => {
+        {filteredProducts.length === 0 ? (
+          <div style={{ gridColumn: '1 / -1', textAlign: 'center', padding: '4rem 1rem', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', background: 'rgba(255,255,255,0.02)', borderRadius: '12px', border: '1px dashed var(--border-color)' }}>
+            <Package size={48} style={{ color: 'var(--text-muted)', marginBottom: '1rem', opacity: 0.5 }} />
+            <h3 style={{ color: 'var(--text-main)', marginBottom: '0.5rem' }}>Nenhum produto encontrado</h3>
+            <p style={{ color: 'var(--text-muted)' }}>Não existem produtos cadastrados para esta categoria ou filtro.</p>
+          </div>
+        ) : (
+          filteredProducts.map((product: Product) => {
           const isLowStock = product.stock <= 10;
           const mainImage = product.images?.[0];
           
@@ -412,7 +426,7 @@ export default function Inventory() {
               </div>
             </div>
           );
-        })}
+        }))}
       </div>
 
       <Modal isOpen={isModalOpen} onClose={() => setIsModalOpen(false)} title={formData.id ? (modalType === 'product' ? 'Editar Produto' : 'Editar Kit') : (modalType === 'product' ? 'Novo Produto' : 'Novo Kit')} size={modalType === 'kit' ? 'large' : 'default'}>

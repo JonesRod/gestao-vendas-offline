@@ -1,14 +1,21 @@
 import React, { useState, useEffect } from 'react';
 import { api } from '../services/api';
 import { FileText, Search, CheckCircle, XCircle, Clock, ChevronDown, ChevronUp, Package, User, CreditCard } from 'lucide-react';
+import Modal from '../components/Modal';
 
 export default function AdminOrders() {
   const [sales, setSales] = useState<any[]>([]);
   const [searchTerm, setSearchTerm] = useState('');
   const [expandedId, setExpandedId] = useState<number | null>(null);
+  const [confirmModalOpen, setConfirmModalOpen] = useState(false);
+  const [orderToCancel, setOrderToCancel] = useState<number | null>(null);
 
   useEffect(() => {
     loadSales();
+    const interval = setInterval(() => {
+      loadSales();
+    }, 3000);
+    return () => clearInterval(interval);
   }, []);
 
   const loadSales = async () => {
@@ -23,8 +30,9 @@ export default function AdminOrders() {
   const handleStatusChange = async (id: number, newStatus: string) => {
     try {
       if (newStatus === 'cancelled') {
-        const confirm = window.confirm('Tem certeza que deseja cancelar este pedido? O estoque e limite serão devolvidos.');
-        if (!confirm) return;
+        setOrderToCancel(id);
+        setConfirmModalOpen(true);
+        return;
       }
       
       await api.put(`/sales/${id}/status`, { status: newStatus });
@@ -32,6 +40,19 @@ export default function AdminOrders() {
     } catch (error) {
       console.error('Erro ao atualizar status', error);
       alert('Erro ao atualizar status do pedido');
+    }
+  };
+
+  const confirmCancel = async () => {
+    if (!orderToCancel) return;
+    try {
+      await api.put(`/sales/${orderToCancel}/status`, { status: 'cancelled' });
+      setConfirmModalOpen(false);
+      setOrderToCancel(null);
+      loadSales();
+    } catch (error) {
+      console.error('Erro ao cancelar pedido', error);
+      alert('Erro ao cancelar o pedido');
     }
   };
 
@@ -183,6 +204,16 @@ export default function AdminOrders() {
           </tbody>
         </table>
       </div>
+
+      <Modal isOpen={confirmModalOpen} onClose={() => setConfirmModalOpen(false)} title="Cancelar Pedido">
+        <div style={{ padding: '1rem 0' }}>
+          <p style={{ color: 'var(--text-main)', fontSize: '1.1rem', marginBottom: '1.5rem', lineHeight: '1.5' }}>Tem certeza que deseja cancelar este pedido?<br/>O estoque e limite de crédito serão devolvidos.</p>
+          <div style={{ display: 'flex', gap: '1rem', justifyContent: 'flex-end' }}>
+            <button className="btn-secondary" onClick={() => setConfirmModalOpen(false)}>Não, Voltar</button>
+            <button className="btn-primary" style={{ background: 'var(--danger)', borderColor: 'var(--danger)' }} onClick={confirmCancel}>Sim, Cancelar</button>
+          </div>
+        </div>
+      </Modal>
     </div>
   );
 }
