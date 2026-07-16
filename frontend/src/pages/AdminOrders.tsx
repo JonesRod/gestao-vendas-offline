@@ -1,11 +1,16 @@
 import React, { useState, useEffect } from 'react';
 import { api } from '../services/api';
-import { FileText, Search, CheckCircle, XCircle, Clock, ChevronDown, ChevronUp, Package, User, CreditCard } from 'lucide-react';
+import { Package, ArrowLeft, Calendar, CreditCard, Clock, CheckCircle, XCircle, FileText, Search, User, ChevronDown, ChevronUp } from 'lucide-react';
+import { useLocation } from 'react-router-dom';
 import Modal from '../components/Modal';
 
 export default function AdminOrders() {
+  const location = useLocation();
+  const highlightParam = new URLSearchParams(location.search).get('highlight');
+
   const [sales, setSales] = useState<any[]>([]);
   const [searchTerm, setSearchTerm] = useState('');
+  const [filter, setFilter] = useState<string>(highlightParam === 'pending' ? 'pending' : 'all');
   const [expandedId, setExpandedId] = useState<number | null>(null);
   const [confirmModalOpen, setConfirmModalOpen] = useState(false);
   const [orderToCancel, setOrderToCancel] = useState<number | null>(null);
@@ -56,10 +61,11 @@ export default function AdminOrders() {
     }
   };
 
-  const filteredSales = sales.filter(s => 
-    s.id.toString().includes(searchTerm) ||
-    (s.customer?.name || '').toLowerCase().includes(searchTerm.toLowerCase())
-  );
+  const filteredSales = sales.filter(s => {
+    const matchesSearch = s.id.toString().includes(searchTerm) || (s.customer?.name || '').toLowerCase().includes(searchTerm.toLowerCase());
+    const matchesFilter = filter === 'all' || s.status === filter;
+    return matchesSearch && matchesFilter;
+  });
 
   const getStatusBadge = (status: string) => {
     if (status === 'completed') return <span style={{ display: 'inline-flex', alignItems: 'center', gap: '4px', background: 'var(--success)', color: '#fff', padding: '0.2rem 0.6rem', borderRadius: '12px', fontSize: '0.8rem' }}><CheckCircle size={14} /> Concluído</span>;
@@ -76,8 +82,14 @@ export default function AdminOrders() {
         </div>
       </div>
 
-      <div className="glass-panel" style={{ padding: '1.5rem', marginBottom: '2rem' }}>
-        <div className="search-box" style={{ width: '100%' }}>
+      <div className="search-filters glass-panel" style={{ marginBottom: '2rem', padding: '1rem', borderRadius: '12px', display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '1rem' }}>
+        <div className="filter-pills" style={{ margin: 0, display: 'flex', gap: '0.8rem', whiteSpace: 'nowrap', overflowX: 'auto' }}>
+          <button className={`pill ${filter === 'all' ? 'active' : ''}`} onClick={() => setFilter('all')}>Todos</button>
+          <button className={`pill ${filter === 'pending' ? 'active' : ''}`} onClick={() => setFilter('pending')}>Pendentes</button>
+          <button className={`pill ${filter === 'completed' ? 'active' : ''}`} onClick={() => setFilter('completed')}>Confirmados</button>
+          <button className={`pill ${filter === 'cancelled' ? 'active' : ''}`} onClick={() => setFilter('cancelled')}>Cancelados</button>
+        </div>
+        <div className="search-box" style={{ flex: '1 1 300px' }}>
           <Search size={20} className="search-icon" />
           <input 
             type="text" 
@@ -102,10 +114,12 @@ export default function AdminOrders() {
             </tr>
           </thead>
           <tbody>
-            {filteredSales.map((sale) => (
+            {filteredSales.map(sale => {
+              const isHighlighted = highlightParam === 'pending' && sale.status === 'pending';
+              return (
               <React.Fragment key={sale.id}>
-                <tr style={{ cursor: 'pointer', background: expandedId === sale.id ? 'var(--bg-panel)' : 'transparent' }} onClick={() => setExpandedId(expandedId === sale.id ? null : sale.id)}>
-                  <td>#{sale.id}</td>
+                <tr className="table-row-hover" style={{ cursor: 'pointer', background: isHighlighted ? 'rgba(245, 158, 11, 0.1)' : (expandedId === sale.id ? 'var(--bg-panel)' : 'transparent'), borderLeft: isHighlighted ? '4px solid var(--warning)' : 'none' }} onClick={() => setExpandedId(expandedId === sale.id ? null : sale.id)}>
+                  <td style={{ fontWeight: 'bold' }}>#{sale.id}</td>
                   <td>{new Date(sale.date).toLocaleString('pt-BR')}</td>
                   <td>{sale.customer ? sale.customer.name : <span style={{ color: 'var(--text-muted)' }}>Sem Identificação</span>}</td>
                   <td style={{ fontWeight: 'bold' }}>R$ {sale.totalAmount.toLocaleString('pt-BR', {minimumFractionDigits:2})}</td>
@@ -193,7 +207,8 @@ export default function AdminOrders() {
                   </tr>
                 )}
               </React.Fragment>
-            ))}
+              );
+            })}
             {filteredSales.length === 0 && (
               <tr>
                 <td colSpan={7} style={{ textAlign: 'center', padding: '2rem', color: 'var(--text-muted)' }}>

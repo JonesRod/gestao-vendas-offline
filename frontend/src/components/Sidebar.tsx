@@ -56,12 +56,14 @@ export default function Sidebar() {
         const pendingSales = salesRes.data.filter((s:any) => s.status === 'pending');
         const overdueInsts = instRes.data.filter((i:any) => i.status === 'pending' && new Date(i.due_date) < new Date());
         
+        const dismissed = JSON.parse(localStorage.getItem('dismissedNotifs') || '{}');
+        
         const newNotifs = [];
-        if (pendingSales.length > 0) {
-           newNotifs.push({ id: 'sales', type: 'warning', text: `${pendingSales.length} pedido(s) pendente(s).` });
+        if (pendingSales.length > 0 && dismissed.pendingSales !== pendingSales.length) {
+           newNotifs.push({ id: 'sales', count: pendingSales.length, type: 'warning', text: `${pendingSales.length} pedido(s) pendente(s).` });
         }
-        if (overdueInsts.length > 0) {
-           newNotifs.push({ id: 'insts', type: 'danger', text: `${overdueInsts.length} pagamento(s) atrasado(s).` });
+        if (overdueInsts.length > 0 && dismissed.overdueInsts !== overdueInsts.length) {
+           newNotifs.push({ id: 'insts', count: overdueInsts.length, type: 'danger', text: `${overdueInsts.length} pagamento(s) atrasado(s).` });
         }
         setNotifications(newNotifs);
       } catch (e) {
@@ -128,12 +130,6 @@ export default function Sidebar() {
           </div>
           {!isCollapsed && <h1 className="logo-text">Gestão<span>Pro</span></h1>}
           <div style={{ display: 'flex', gap: '4px', marginLeft: 'auto' }}>
-            {!isCollapsed && role !== 'CUSTOMER' && (
-              <button className="btn-collapse" onClick={() => setIsNotifModalOpen(true)} style={{ position: 'relative' }} title="Notificações">
-                <Bell size={20} />
-                {notifications.length > 0 && <span style={{ position: 'absolute', top: 4, right: 4, width: 8, height: 8, background: 'var(--danger)', borderRadius: '50%' }}></span>}
-              </button>
-            )}
             <button className="btn-collapse" onClick={toggleCollapse} title={isCollapsed ? "Expandir" : "Recolher"}>
               {isCollapsed ? <ChevronRight size={20} /> : <ChevronLeft size={20} />}
             </button>
@@ -141,6 +137,32 @@ export default function Sidebar() {
         </div>
 
       <nav className="sidebar-nav">
+        {role !== 'CUSTOMER' && (
+          <button 
+            className="nav-item"
+            style={{ background: 'transparent', border: 'none', cursor: 'pointer', outline: 'none', width: '100%', display: 'flex', alignItems: 'center', textAlign: 'left' }}
+            title={isCollapsed ? "Notificações" : undefined}
+            onClick={() => {
+              setIsNotifModalOpen(true);
+              setIsMobileMenuOpen(false);
+            }}
+          >
+            <div style={{ position: 'relative', display: 'flex', alignItems: 'center' }}>
+              <Bell size={20} className="nav-icon" />
+              {notifications.length > 0 && <span style={{ position: 'absolute', top: -4, right: -4, width: 8, height: 8, background: 'var(--danger)', borderRadius: '50%' }}></span>}
+            </div>
+            {!isCollapsed && (
+              <span className="nav-label" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flex: 1, paddingRight: '0.5rem', fontWeight: 500 }}>
+                Notificações
+                {notifications.length > 0 && (
+                  <span style={{ background: 'var(--danger)', color: 'white', fontSize: '0.75rem', padding: '0.1rem 0.5rem', borderRadius: '12px', fontWeight: 'bold' }}>
+                    {notifications.length}
+                  </span>
+                )}
+              </span>
+            )}
+          </button>
+        )}
         {navItems.map((item) => {
           const Icon = item.icon;
           return (
@@ -224,7 +246,28 @@ export default function Sidebar() {
           ) : (
             <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
               {notifications.map(n => (
-                <div key={n.id} style={{ padding: '1rem', background: 'rgba(255,255,255,0.05)', borderRadius: '8px', borderLeft: `4px solid var(--${n.type})` }}>
+                <div 
+                  key={n.id} 
+                  style={{ padding: '1rem', background: 'rgba(255,255,255,0.05)', borderRadius: '8px', borderLeft: `4px solid var(--${n.type})`, cursor: 'pointer', transition: 'background 0.2s' }}
+                  onClick={() => {
+                    setIsNotifModalOpen(false);
+                    const dismissed = JSON.parse(localStorage.getItem('dismissedNotifs') || '{}');
+                    if (n.id === 'sales') {
+                      dismissed.pendingSales = n.count;
+                      localStorage.setItem('dismissedNotifs', JSON.stringify(dismissed));
+                      setNotifications(prev => prev.filter(x => x.id !== 'sales'));
+                      navigate('/orders?highlight=pending');
+                    }
+                    if (n.id === 'insts') {
+                      dismissed.overdueInsts = n.count;
+                      localStorage.setItem('dismissedNotifs', JSON.stringify(dismissed));
+                      setNotifications(prev => prev.filter(x => x.id !== 'insts'));
+                      navigate('/receipts?highlight=overdue');
+                    }
+                  }}
+                  onMouseEnter={(e) => e.currentTarget.style.background = 'rgba(255,255,255,0.1)'}
+                  onMouseLeave={(e) => e.currentTarget.style.background = 'rgba(255,255,255,0.05)'}
+                >
                   <p style={{ margin: 0, color: 'var(--text-main)' }}>{n.text}</p>
                 </div>
               ))}

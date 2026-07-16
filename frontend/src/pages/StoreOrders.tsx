@@ -2,12 +2,16 @@ import React, { useState, useEffect } from 'react';
 import { api } from '../services/api';
 import { useAuth } from '../contexts/AuthContext';
 import { Package, ArrowLeft, Calendar, CreditCard, Clock, CheckCircle, XCircle } from 'lucide-react';
-import { Link } from 'react-router-dom';
+import { Link, useLocation } from 'react-router-dom';
 
 export default function StoreOrders() {
+  const location = useLocation();
+  const highlightParam = new URLSearchParams(location.search).get('highlight');
+
   const { user } = useAuth();
   const [orders, setOrders] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
+  const [filter, setFilter] = useState<string>(highlightParam === 'pending' ? 'pending' : 'all');
 
   useEffect(() => {
     const fetchOrders = async () => {
@@ -48,6 +52,14 @@ export default function StoreOrders() {
     return <div className="store-container" style={{ textAlign: 'center', padding: '4rem' }}>Carregando pedidos...</div>;
   }
 
+  const filteredOrders = orders.filter(order => {
+    if (filter === 'all') return true;
+    if (filter === 'pending') return order.status === 'pending';
+    if (filter === 'completed') return order.status === 'completed';
+    if (filter === 'cancelled') return order.status === 'cancelled';
+    return true;
+  });
+
   return (
     <div className="store-container" style={{ paddingBottom: '4rem' }}>
       <div style={{ display: 'flex', alignItems: 'center', gap: '1rem', marginBottom: '2rem' }}>
@@ -57,7 +69,36 @@ export default function StoreOrders() {
         <h2 style={{ margin: 0, color: 'var(--text-main)' }}>Meus Pedidos</h2>
       </div>
 
-      {orders.length === 0 ? (
+      <div className="search-filters glass-panel" style={{ marginBottom: '2rem', padding: '1rem', borderRadius: '12px', display: 'flex', justifyContent: 'center', overflowX: 'auto' }}>
+        <div className="filter-pills" style={{ margin: 0, display: 'flex', gap: '0.8rem', whiteSpace: 'nowrap' }}>
+          <button 
+            className={`pill ${filter === 'all' ? 'active' : ''}`}
+            onClick={() => setFilter('all')}
+          >
+            Todos
+          </button>
+          <button 
+            className={`pill ${filter === 'pending' ? 'active' : ''}`}
+            onClick={() => setFilter('pending')}
+          >
+            Pendentes
+          </button>
+          <button 
+            className={`pill ${filter === 'completed' ? 'active' : ''}`}
+            onClick={() => setFilter('completed')}
+          >
+            Confirmados
+          </button>
+          <button 
+            className={`pill ${filter === 'cancelled' ? 'active' : ''}`}
+            onClick={() => setFilter('cancelled')}
+          >
+            Cancelados
+          </button>
+        </div>
+      </div>
+
+      {filteredOrders.length === 0 ? (
         <div className="glass-panel" style={{ textAlign: 'center', padding: '3rem', borderRadius: '12px' }}>
           <Package size={48} style={{ color: 'var(--text-muted)', margin: '0 auto 1rem', opacity: 0.5 }} />
           <h3 style={{ color: 'var(--text-main)' }}>Nenhum pedido encontrado</h3>
@@ -68,8 +109,10 @@ export default function StoreOrders() {
         </div>
       ) : (
         <div style={{ display: 'flex', flexDirection: 'column', gap: '1.5rem' }}>
-          {orders.map(order => (
-            <div key={order.id} className="glass-panel" style={{ padding: '1.5rem', borderRadius: '12px' }}>
+          {filteredOrders.map(order => {
+            const isHighlighted = highlightParam === 'pending' && order.status === 'pending';
+            return (
+            <div key={order.id} className="glass-panel" style={{ padding: '1.5rem', borderRadius: '12px', border: isHighlighted ? '2px solid var(--warning)' : 'none', background: isHighlighted ? 'rgba(245, 158, 11, 0.1)' : '' }}>
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', flexWrap: 'wrap', gap: '1rem', marginBottom: '1rem', paddingBottom: '1rem', borderBottom: '1px solid var(--border-color)' }}>
                 <div>
                   <h3 style={{ margin: '0 0 0.5rem 0', color: 'var(--text-main)' }}>Pedido #{order.id}</h3>
@@ -132,7 +175,8 @@ export default function StoreOrders() {
                 </div>
               </div>
             </div>
-          ))}
+            );
+          })}
         </div>
       )}
     </div>

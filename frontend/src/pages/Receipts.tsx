@@ -11,6 +11,7 @@ import './Receipts.css';
 export default function Receipts() {
   const [searchTerm, setSearchTerm] = useState('');
   const location = useLocation();
+  const highlightParam = new URLSearchParams(location.search).get('highlight');
   const [step, setStep] = useState<'search' | 'account'>('search');
   const [selectedCustomer, setSelectedCustomer] = useState<Customer | null>(null);
   const [customerInstallments, setCustomerInstallments] = useState<Installment[]>([]);
@@ -365,8 +366,10 @@ Obrigado pela preferência!`;
                         <p>Excelente! Nenhuma conta de cliente está em atraso ou vencendo nos próximos 5 dias.</p>
                       </div>
                     ) : (
-                      attentionDebtors.map(customer => (
-                        <div key={customer.id} className="debtor-row glass-panel" onClick={() => handleSelectCustomer(customer)} style={{ borderLeft: '4px solid var(--danger)' }}>
+                      attentionDebtors.map(customer => {
+                        const isHighlighted = highlightParam === 'overdue';
+                        return (
+                        <div key={customer.id} className="debtor-row glass-panel" onClick={() => handleSelectCustomer(customer)} style={{ borderLeft: '4px solid var(--danger)', background: isHighlighted ? 'rgba(239, 68, 68, 0.1)' : '' }}>
                           <div>
                             <h3 style={{ fontSize: '1.2rem', marginBottom: '0.2rem' }}>{customer.name}</h3>
                             <p style={{ color: 'var(--text-muted)', fontSize: '0.85rem' }}>{customer.phone}</p>
@@ -376,7 +379,8 @@ Obrigado pela preferência!`;
                             <div style={{ fontSize: '1.4rem', fontWeight: 800, color: 'var(--warning)' }}>R$ {customer.credit_used.toLocaleString('pt-BR', {minimumFractionDigits: 2, maximumFractionDigits: 2})}</div>
                           </div>
                         </div>
-                      ))
+                        );
+                      })
                     )}
                   </>
                 )}
@@ -445,8 +449,9 @@ Obrigado pela preferência!`;
             ) : (
                customerInstallments.map(inst => {
                  const isDelayed = calculateDelay(inst.due_date) > 0;
+                 const isHighlighted = highlightParam === 'overdue' && isDelayed;
                  return (
-                  <div key={inst.id} className="installment-card glass-panel" style={{ borderLeft: isDelayed ? '4px solid var(--danger)' : '4px solid var(--primary)' }}>
+                  <div key={inst.id} className="installment-card glass-panel" style={{ borderLeft: isDelayed ? '4px solid var(--danger)' : '4px solid var(--primary)', background: isHighlighted ? 'rgba(239, 68, 68, 0.1)' : '' }}>
                     
                     <div className="installment-info">
                       <div>

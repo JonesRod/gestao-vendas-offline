@@ -2,9 +2,12 @@ import { useState, useEffect } from 'react';
 import { api } from '../services/api';
 import { useAuth } from '../contexts/AuthContext';
 import { ArrowLeft, CheckCircle, Clock, X, Package } from 'lucide-react';
-import { Link } from 'react-router-dom';
+import { Link, useLocation } from 'react-router-dom';
 
 export default function StoreInstallments() {
+  const location = useLocation();
+  const highlightParam = new URLSearchParams(location.search).get('highlight');
+
   const { user } = useAuth();
   const [installments, setInstallments] = useState<any[]>([]);
   const [settings, setSettings] = useState<any>(null);
@@ -174,8 +177,10 @@ export default function StoreInstallments() {
             <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
               {pending.map(inst => {
                 const totals = getInstallmentTotals(inst);
+                const isDelayed = totals.calcPenalty > 0 || totals.calcInterest > 0;
+                const isHighlighted = highlightParam === 'overdue' && isDelayed;
                 return (
-                <div key={inst.id} className="glass-panel" style={{ padding: '1.5rem', borderRadius: '12px', display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '1rem' }}>
+                <div key={inst.id} className="glass-panel" style={{ padding: '1.5rem', borderRadius: '12px', borderLeft: isDelayed ? '4px solid var(--danger)' : '4px solid var(--primary)', background: isHighlighted ? 'rgba(239, 68, 68, 0.1)' : '', display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '1rem' }}>
                   <div>
                     <h4 style={{ margin: '0 0 0.25rem 0', color: 'var(--text-main)' }}>Pedido #{inst.saleId} - Parcela {inst.number}/{inst.total}</h4>
                     <p style={{ margin: 0, color: 'var(--text-secondary)', fontSize: '0.9rem' }}>Vencimento: {new Date(inst.due_date).toLocaleDateString('pt-BR')}</p>
