@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import { useState, useEffect } from 'react';
 import { Outlet, Link, useNavigate } from 'react-router-dom';
 import { ShoppingCart, User, LogOut, Package, ClipboardList, CreditCard, Bell } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext';
@@ -85,14 +85,7 @@ export default function StoreLayout() {
                 <span className="user-greeting">Olá, {user?.name ? user.name.split(' ')[0] : 'Cliente'}</span>
               </button>
               <div className="dropdown">
-                <Link to="/loja/pedidos" className="dropdown-item">
-                  <ClipboardList size={18} />
-                  Minhas Compras
-                </Link>
-                <Link to="/loja/faturas" className="dropdown-item">
-                  <CreditCard size={18} />
-                  Minhas Faturas
-                </Link>
+
                 <Link to="/loja/perfil" className="dropdown-item">
                   <User size={18} />
                   Meu Perfil
