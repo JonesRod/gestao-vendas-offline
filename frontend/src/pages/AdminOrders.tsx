@@ -89,18 +89,18 @@ export default function AdminOrders() {
           <button className={`pill ${filter === 'completed' ? 'active' : ''}`} onClick={() => setFilter('completed')}>Confirmados</button>
           <button className={`pill ${filter === 'cancelled' ? 'active' : ''}`} onClick={() => setFilter('cancelled')}>Cancelados</button>
         </div>
-        <div className="search-box" style={{ flex: '1 1 300px' }}>
+        <div className="search-box" style={{ flex: '1 1 100%', minWidth: '0' }}>
           <Search size={20} className="search-icon" />
           <input 
             type="text" 
-            placeholder="Buscar por ID do pedido ou Nome do cliente..." 
+            placeholder="Buscar pedido ou cliente..." 
             value={searchTerm}
             onChange={e => setSearchTerm(e.target.value)}
           />
         </div>
       </div>
 
-      <div className="glass-panel" style={{ overflow: 'hidden' }}>
+      <div className="glass-panel" style={{ overflowX: 'auto', WebkitOverflowScrolling: 'touch' }}>
         <table className="data-table">
           <thead>
             <tr>
@@ -122,7 +122,7 @@ export default function AdminOrders() {
                   <td style={{ fontWeight: 'bold' }}>#{sale.id}</td>
                   <td>{new Date(sale.date).toLocaleString('pt-BR')}</td>
                   <td>{sale.customer ? sale.customer.name : <span style={{ color: 'var(--text-muted)' }}>Sem Identificação</span>}</td>
-                  <td style={{ fontWeight: 'bold' }}>R$ {sale.totalAmount.toLocaleString('pt-BR', {minimumFractionDigits:2})}</td>
+                  <td style={{ fontWeight: 'bold' }}>R$ {sale.totalAmount.toLocaleString('pt-BR', {minimumFractionDigits:2, maximumFractionDigits:2})}</td>
                   <td>{sale.paymentMethod.replace(' | credit', '')}</td>
                   <td>{getStatusBadge(sale.status)}</td>
                   <td>
@@ -143,14 +143,14 @@ export default function AdminOrders() {
                       <div style={{ background: 'var(--bg-main)', padding: '1.5rem', borderBottom: '1px solid var(--border-color)', display: 'flex', flexDirection: 'column', gap: '1.5rem' }}>
                         
                         {/* Ações de Status */}
-                        <div style={{ display: 'flex', gap: '1rem', alignItems: 'center', paddingBottom: '1rem', borderBottom: '1px solid var(--border-color)' }}>
+                        <div style={{ display: 'flex', gap: '1rem', alignItems: 'center', flexWrap: 'wrap', paddingBottom: '1rem', borderBottom: '1px solid var(--border-color)' }}>
                           <span style={{ color: 'var(--text-secondary)', fontWeight: 'bold' }}>Alterar Status:</span>
                           <button onClick={() => handleStatusChange(sale.id, 'pending')} className="btn-secondary" style={{ padding: '0.4rem 1rem' }} disabled={sale.status === 'pending' || sale.status === 'cancelled'}>Marcar como Pendente</button>
                           <button onClick={() => handleStatusChange(sale.id, 'completed')} className="btn-secondary" style={{ padding: '0.4rem 1rem', borderColor: 'var(--success)', color: 'var(--success)' }} disabled={sale.status === 'completed' || sale.status === 'cancelled'}>Marcar como Concluído</button>
                           <button onClick={() => handleStatusChange(sale.id, 'cancelled')} className="btn-secondary" style={{ padding: '0.4rem 1rem', borderColor: 'var(--danger)', color: 'var(--danger)' }} disabled={sale.status === 'cancelled'}>Cancelar Pedido</button>
                         </div>
 
-                        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(300px, 1fr))', gap: '2rem' }}>
+                        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(240px, 1fr))', gap: '2rem' }}>
                           {/* Detalhes do Cliente */}
                           {sale.customer && (
                             <div>
@@ -172,11 +172,11 @@ export default function AdminOrders() {
                                   <div style={{ display: 'flex', flexDirection: 'column' }}>
                                     <span>{item.product.name}</span>
                                     <span style={{ fontSize: '0.8rem', color: 'var(--text-secondary)' }}>
-                                      {item.quantity}x {!sale.paymentMethod?.includes('credit') && `de R$ ${item.price_applied.toLocaleString('pt-BR', {minimumFractionDigits:2})}`}
+                                      {item.quantity}x {!sale.paymentMethod?.includes('credit') && `de R$ ${item.price_applied.toLocaleString('pt-BR', {minimumFractionDigits:2, maximumFractionDigits:2})}`}
                                     </span>
                                   </div>
                                   {!sale.paymentMethod?.includes('credit') && (
-                                    <span style={{ fontWeight: 'bold' }}>R$ {(item.quantity * item.price_applied).toLocaleString('pt-BR', {minimumFractionDigits:2})}</span>
+                                    <span style={{ fontWeight: 'bold' }}>R$ {(item.quantity * item.price_applied).toLocaleString('pt-BR', {minimumFractionDigits:2, maximumFractionDigits:2})}</span>
                                   )}
                                 </div>
                               ))}
@@ -195,7 +195,7 @@ export default function AdminOrders() {
                                       <span style={{ fontSize: '0.8rem', color: 'var(--text-secondary)' }}>Vencimento: {new Date(inst.due_date).toLocaleDateString('pt-BR')}</span>
                                     </div>
                                     <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end' }}>
-                                      <span style={{ fontWeight: 'bold' }}>R$ {inst.amount.toLocaleString('pt-BR', {minimumFractionDigits:2})}</span>
+                                      <span style={{ fontWeight: 'bold' }}>R$ {inst.amount.toLocaleString('pt-BR', {minimumFractionDigits:2, maximumFractionDigits:2})}</span>
                                       <span style={{ fontSize: '0.75rem', color: inst.status === 'paid' ? 'var(--success)' : 'var(--warning)', background: 'var(--bg-main)', padding: '0.1rem 0.4rem', borderRadius: '4px', marginTop: '0.2rem' }}>
                                         {inst.status === 'paid' ? 'Pago' : 'Pendente'}
                                       </span>

@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useNavigate, Link } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext';
 import { Lock, User, Store, Eye, EyeOff, ChevronRight, Shield, ShoppingBag, Briefcase } from 'lucide-react';
@@ -12,10 +12,24 @@ export default function Login() {
   const [cpf, setCpf] = useState('');
   const [password, setPassword] = useState('');
   const [roles, setRoles] = useState<string[]>([]);
-  const [selectedRole, setSelectedRole] = useState<string>('');
   const [showPassword, setShowPassword] = useState(false);
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
+  const [tradeName, setTradeName] = useState('GestãoPro');
+
+  useEffect(() => {
+    const fetchSettings = async () => {
+      try {
+        const res = await api.get('/settings');
+        if (res.data && res.data.tradeName) {
+          setTradeName(res.data.tradeName);
+        }
+      } catch (e) {
+        console.error(e);
+      }
+    };
+    fetchSettings();
+  }, []);
   
   const { login } = useAuth();
   const navigate = useNavigate();
@@ -49,7 +63,6 @@ export default function Login() {
 
   // Quando escolhe o perfil (se tiver mais de um)
   const handleRoleSelect = async (role: string) => {
-    setSelectedRole(role);
     setError('');
     setLoading(true);
     
@@ -82,7 +95,7 @@ export default function Login() {
     
     if (result && result.success) {
       if (result.requireRoleSelection) {
-        setRoles(result.availableRoles);
+        setRoles(result.availableRoles || []);
         setStep('ROLE'); // Vai para a tela de escolher o perfil
       } else {
         // Logado direto (só tinha 1 perfil)
@@ -110,7 +123,7 @@ export default function Login() {
           <div className="icon">
             <Store size={32} />
           </div>
-          <h1>GestãoPro</h1>
+          <h1>{tradeName}</h1>
           <p>Faça login para continuar</p>
         </div>
 

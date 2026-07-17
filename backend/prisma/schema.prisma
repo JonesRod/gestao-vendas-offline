@@ -189,6 +189,7 @@ model Settings {
   city         String?
   state        String?
   observation  String?
+  show_address_storefront Boolean @default(true)
 
   tradeName      String
   companyName    String

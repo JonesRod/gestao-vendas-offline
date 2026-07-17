@@ -133,7 +133,7 @@ export default function StoreOrders() {
                     <div key={item.id} style={{ display: 'flex', justifyContent: 'space-between', color: 'var(--text-main)', fontSize: '0.95rem' }}>
                       <span>{item.quantity}x {item.product?.name || `Produto #${item.productId}`}</span>
                       {!order.paymentMethod?.includes('credit') && (
-                        <span>R$ {(item.quantity * item.price_applied).toLocaleString('pt-BR', {minimumFractionDigits: 2})}</span>
+                        <span>R$ {(item.quantity * item.price_applied).toLocaleString('pt-BR', {minimumFractionDigits: 2, maximumFractionDigits: 2})}</span>
                       )}
                     </div>
                   ))}
@@ -153,7 +153,7 @@ export default function StoreOrders() {
                           <div style={{ fontSize: '0.8rem', color: 'var(--text-secondary)' }}>Venc.: {new Date(inst.due_date).toLocaleDateString('pt-BR')}</div>
                         </div>
                         <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end' }}>
-                          <span style={{ fontWeight: 'bold' }}>R$ {inst.amount.toLocaleString('pt-BR', {minimumFractionDigits: 2})}</span>
+                          <span style={{ fontWeight: 'bold' }}>R$ {inst.amount.toLocaleString('pt-BR', {minimumFractionDigits: 2, maximumFractionDigits: 2})}</span>
                           <span style={{ fontSize: '0.75rem', color: inst.status === 'paid' ? 'var(--success)' : 'var(--warning)', marginTop: '0.1rem' }}>
                             {inst.status === 'paid' ? 'Pago' : 'Pendente'}
                           </span>
@@ -172,7 +172,7 @@ export default function StoreOrders() {
                 <div style={{ textAlign: 'right' }}>
                   <span style={{ color: 'var(--text-secondary)', marginRight: '1rem', fontSize: '1rem' }}>Total:</span>
                   <span style={{ color: 'var(--text-primary)', fontSize: '1.3rem', fontWeight: 'bold' }}>
-                    R$ {order.totalAmount.toLocaleString('pt-BR', {minimumFractionDigits: 2})}
+                    R$ {order.totalAmount.toLocaleString('pt-BR', {minimumFractionDigits: 2, maximumFractionDigits: 2})}
                   </span>
                 </div>
               </div>

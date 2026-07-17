@@ -141,6 +141,7 @@ export interface Settings {
   email: string;
   phone: string;
   address?: Address;
+  show_address_storefront?: boolean;
   loyalty_active: boolean;
   loyalty_days: number;
   penalty_active: boolean;

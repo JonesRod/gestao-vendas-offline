@@ -189,7 +189,7 @@ export default function StoreInstallments() {
                   <div style={{ display: 'flex', alignItems: 'center', gap: '1.5rem', flexWrap: 'wrap' }}>
                     <div style={{ textAlign: 'right' }}>
                       <span style={{ fontSize: '0.8rem', color: 'var(--text-secondary)', display: 'block' }}>Valor {totals.calcDiscount > 0 ? '(c/ Desconto)' : ''}</span>
-                      <strong style={{ fontSize: '1.2rem', color: 'var(--warning)' }}>R$ {totals.finalExpected.toLocaleString('pt-BR', {minimumFractionDigits: 2})}</strong>
+                      <strong style={{ fontSize: '1.2rem', color: 'var(--warning)' }}>R$ {totals.finalExpected.toLocaleString('pt-BR', {minimumFractionDigits: 2, maximumFractionDigits: 2})}</strong>
                     </div>
                     
                     <div style={{ display: 'flex', gap: '0.5rem' }}>
@@ -234,7 +234,7 @@ export default function StoreInstallments() {
                   <div style={{ display: 'flex', alignItems: 'center', gap: '1.5rem', flexWrap: 'wrap' }}>
                     <div style={{ textAlign: 'right' }}>
                       <span style={{ fontSize: '0.8rem', color: 'var(--success)', fontWeight: 'bold', display: 'block' }}>Pago</span>
-                      <strong style={{ fontSize: '1.2rem', color: 'var(--text-muted)' }}>R$ {inst.amount.toLocaleString('pt-BR', {minimumFractionDigits: 2})}</strong>
+                      <strong style={{ fontSize: '1.2rem', color: 'var(--text-muted)' }}>R$ {inst.amount.toLocaleString('pt-BR', {minimumFractionDigits: 2, maximumFractionDigits: 2})}</strong>
                     </div>
                     <Link 
                       to="/loja/pedidos" 
@@ -274,11 +274,11 @@ export default function StoreInstallments() {
                   <p style={{ margin: 0, color: 'var(--danger)', fontSize: '0.9rem', fontWeight: 'bold' }}>Atraso Detectado</p>
                   <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.9rem', marginTop: '0.5rem' }}>
                     <span>Multa:</span>
-                    <span>R$ {penaltyAmount.toLocaleString('pt-BR', {minimumFractionDigits: 2})}</span>
+                    <span>R$ {penaltyAmount.toLocaleString('pt-BR', {minimumFractionDigits: 2, maximumFractionDigits: 2})}</span>
                   </div>
                   <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.9rem' }}>
                     <span>Juros:</span>
-                    <span>R$ {interestAmount.toLocaleString('pt-BR', {minimumFractionDigits: 2})}</span>
+                    <span>R$ {interestAmount.toLocaleString('pt-BR', {minimumFractionDigits: 2, maximumFractionDigits: 2})}</span>
                   </div>
                 </div>
               )}

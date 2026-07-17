@@ -4,6 +4,7 @@ import { ShoppingCart, User, LogOut, Package, ClipboardList, CreditCard, Bell } 
 import { useAuth } from '../contexts/AuthContext';
 import { useCart } from '../contexts/CartContext';
 import { api } from '../services/api';
+import { db } from '../db/db';
 import Modal from './Modal';
 import './StoreLayout.css';
 
@@ -13,15 +14,51 @@ export default function StoreLayout() {
   const navigate = useNavigate();
   const [isNotifModalOpen, setIsNotifModalOpen] = useState(false);
   const [notifications, setNotifications] = useState<any[]>([]);
+  const [storeName, setStoreName] = useState('Minha Loja');
+  const [storeAddress, setStoreAddress] = useState('');
+  const [storeContact, setStoreContact] = useState({ phone: '', email: '' });
+  const [storeDetails, setStoreDetails] = useState({ companyName: '', cnpj: '' });
 
   useEffect(() => {
     const fetchNotifs = async () => {
       if (!user) return;
-      try {
-        const [salesRes, instRes] = await Promise.all([
-          api.get(`/sales?customerId=${user.id}`),
-          api.get(`/installments?customerId=${user.id}`)
-        ]);
+        try {
+          const [salesRes, instRes, settingsRes] = await Promise.all([
+            api.get(`/sales?customerId=${user.id}`),
+            api.get(`/installments?customerId=${user.id}`),
+            api.get('/settings')
+          ]);
+          
+          if (settingsRes.data) {
+            if (settingsRes.data.tradeName) {
+              setStoreName(settingsRes.data.tradeName);
+            }
+            if (settingsRes.data.companyName || settingsRes.data.cnpj) {
+              setStoreDetails({
+                companyName: settingsRes.data.companyName || '',
+                cnpj: settingsRes.data.cnpj || ''
+              });
+            }
+            
+            setStoreContact({
+              phone: settingsRes.data.phone || '',
+              email: settingsRes.data.email || ''
+            });
+            
+            if (settingsRes.data.show_address_storefront === false) {
+              setStoreAddress('');
+            } else {
+              const { street, number, neighborhood, city, state, cep } = settingsRes.data;
+              if (street) {
+                let addr = `${street}, ${number || 'S/N'}`;
+                if (neighborhood) addr += ` - ${neighborhood}`;
+                if (city) addr += `, ${city}`;
+                if (state) addr += ` - ${state}`;
+                if (cep) addr += ` (${cep})`;
+                setStoreAddress(addr);
+              }
+            }
+          }
         
         const pendingSales = salesRes.data.filter((s:any) => s.status === 'pending');
         const overdueInsts = instRes.data.filter((i:any) => i.status === 'pending' && new Date(i.due_date) < new Date());
@@ -57,7 +94,7 @@ export default function StoreLayout() {
         <div className="store-container header-content">
           <Link to="/loja" className="store-logo">
             <Package size={32} className="logo-icon" />
-            <span>Minha Loja</span>
+            <span>{storeName}</span>
           </Link>
 
           <div className="store-actions">
@@ -105,8 +142,19 @@ export default function StoreLayout() {
       </main>
 
       <footer className="store-footer">
-        <div className="store-container">
-          <p>&copy; {new Date().getFullYear()} Minha Loja. Todos os direitos reservados.</p>
+        <div className="store-container" style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '0.5rem', textAlign: 'center' }}>
+          <p style={{ margin: 0, fontWeight: 'bold' }}>&copy; {new Date().getFullYear()} {storeName}. Todos os direitos reservados.</p>
+          {(storeDetails.companyName || storeDetails.cnpj) && (
+            <p style={{ margin: 0, fontSize: '0.85rem', color: 'var(--text-secondary)' }}>
+              {storeDetails.companyName} {storeDetails.companyName && storeDetails.cnpj ? ' - ' : ''} {storeDetails.cnpj ? `CNPJ: ${storeDetails.cnpj}` : ''}
+            </p>
+          )}
+          {(storeContact.phone || storeContact.email) && (
+            <p style={{ margin: 0, fontSize: '0.85rem', color: 'var(--text-secondary)' }}>
+              {storeContact.phone ? `WhatsApp: ${storeContact.phone}` : ''} {storeContact.phone && storeContact.email ? ' | ' : ''} {storeContact.email ? `E-mail: ${storeContact.email}` : ''}
+            </p>
+          )}
+          {storeAddress && <p style={{ margin: 0, fontSize: '0.85rem', color: 'var(--text-muted)' }}>{storeAddress}</p>}
         </div>
       </footer>
 

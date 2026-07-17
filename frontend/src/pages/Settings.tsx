@@ -9,10 +9,12 @@ import './Settings.css';
 export default function Settings() {
   const settingsData = useLiveQuery(() => db.settings.get(1));
   const [isSaved, setIsSaved] = useState(false);
+  const [showAddress, setShowAddress] = useState(false);
 
   const initialFormState: Partial<SettingsType> = {
     email: '', phone: '', tradeName: '', companyName: '', cnpj: '', ownerBirthDate: '',
     address: { cep: '', street: '', number: '', neighborhood: '', city: '', state: '', observation: '' },
+    show_address_storefront: true,
     loyalty_active: false, loyalty_days: 30,
     penalty_active: false, penalty_percent: 2, interest_percent: 1,
     whatsapp_token: '', whatsapp_instance: '', email_token: '', email_sender: '',
@@ -62,7 +64,13 @@ export default function Settings() {
       }
 
       try {
-        await api.put('/settings', dataToSave);
+        const { address, id, ...rest } = dataToSave;
+        let apiPayload = { ...rest };
+        if (address) {
+          const { lat, lng, ...addrRest } = address;
+          apiPayload = { ...apiPayload, ...addrRest };
+        }
+        await api.put('/settings', apiPayload);
       } catch (apiErr) {
         console.error('Falha ao sincronizar configurações com o servidor:', apiErr);
       }
@@ -122,40 +130,52 @@ export default function Settings() {
             </div>
           </div>
           
-          <h3 style={{fontSize: '0.95rem', margin: '1rem 0 0.5rem', color: 'var(--text-muted)'}}>Endereço</h3>
-          <div className="form-row">
-            <div className="form-group">
-              <label>CEP</label>
-              <input type="text" placeholder="00000-000" value={formData.address?.cep} onChange={handleCepChange} required />
-            </div>
-            <div className="form-group">
-              <label>UF</label>
-              <input type="text" maxLength={2} placeholder="SP" value={formData.address?.state} onChange={e => setFormData({...formData, address: {...formData.address!, state: e.target.value}})} />
-            </div>
-          </div>
-          <div className="form-row">
-            <div className="form-group" style={{flex: 2}}>
-              <label>Rua / Avenida</label>
-              <input type="text" value={formData.address?.street} onChange={e => setFormData({...formData, address: {...formData.address!, street: e.target.value}})} required />
-            </div>
-            <div className="form-group">
-              <label>Número</label>
-              <input type="text" value={formData.address?.number} onChange={e => setFormData({...formData, address: {...formData.address!, number: e.target.value}})} required />
+          <div style={{display: 'flex', justifyContent: 'space-between', alignItems: 'center', margin: '1.5rem 0 0.5rem'}}>
+            <h3 style={{fontSize: '0.95rem', margin: 0, color: 'var(--text-muted)'}}>Endereço</h3>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+              <span style={{ fontSize: '0.85rem', color: 'var(--text-secondary)' }}>Mostrar na Loja para o Cliente</span>
+              <label className="toggle-switch">
+                <input type="checkbox" checked={formData.show_address_storefront !== false} onChange={e => setFormData({...formData, show_address_storefront: e.target.checked})} />
+                <span className="slider"></span>
+              </label>
             </div>
           </div>
-          <div className="form-row">
-            <div className="form-group">
-              <label>Bairro</label>
-              <input type="text" value={formData.address?.neighborhood} onChange={e => setFormData({...formData, address: {...formData.address!, neighborhood: e.target.value}})} />
+          
+          <div style={{ marginTop: '1rem', display: 'flex', flexDirection: 'column', gap: '1rem' }}>
+            <div className="form-row">
+              <div className="form-group">
+                <label>CEP</label>
+                <input type="text" placeholder="00000-000" value={formData.address?.cep || ''} onChange={handleCepChange} />
+              </div>
+              <div className="form-group">
+                <label>UF</label>
+                <input type="text" maxLength={2} placeholder="SP" value={formData.address?.state || ''} onChange={e => setFormData({...formData, address: {...formData.address!, state: e.target.value}})} />
+              </div>
+            </div>
+            <div className="form-row">
+              <div className="form-group" style={{flex: 2}}>
+                <label>Rua / Avenida</label>
+                <input type="text" value={formData.address?.street || ''} onChange={e => setFormData({...formData, address: {...formData.address!, street: e.target.value}})} />
+              </div>
+              <div className="form-group">
+                <label>Número</label>
+                <input type="text" value={formData.address?.number || ''} onChange={e => setFormData({...formData, address: {...formData.address!, number: e.target.value}})} />
+              </div>
+            </div>
+            <div className="form-row">
+              <div className="form-group">
+                <label>Bairro</label>
+                <input type="text" value={formData.address?.neighborhood || ''} onChange={e => setFormData({...formData, address: {...formData.address!, neighborhood: e.target.value}})} />
+              </div>
+              <div className="form-group">
+                <label>Cidade</label>
+                <input type="text" value={formData.address?.city || ''} onChange={e => setFormData({...formData, address: {...formData.address!, city: e.target.value}})} />
+              </div>
             </div>
             <div className="form-group">
-              <label>Cidade</label>
-              <input type="text" value={formData.address?.city} onChange={e => setFormData({...formData, address: {...formData.address!, city: e.target.value}})} />
+              <label>Complemento / Observação</label>
+              <input type="text" value={formData.address?.observation || ''} onChange={e => setFormData({...formData, address: {...formData.address!, observation: e.target.value}})} />
             </div>
-          </div>
-          <div className="form-group">
-            <label>Complemento / Observação</label>
-            <input type="text" value={formData.address?.observation} onChange={e => setFormData({...formData, address: {...formData.address!, observation: e.target.value}})} />
           </div>
         </div>
 
