@@ -123,7 +123,7 @@ export default function AdminOrders() {
                   <td>{new Date(sale.date).toLocaleString('pt-BR')}</td>
                   <td>{sale.customer ? sale.customer.name : <span style={{ color: 'var(--text-muted)' }}>Sem Identificação</span>}</td>
                   <td style={{ fontWeight: 'bold' }}>R$ {sale.totalAmount.toLocaleString('pt-BR', {minimumFractionDigits:2})}</td>
-                  <td>{sale.paymentMethod}</td>
+                  <td>{sale.paymentMethod.replace(' | credit', '')}</td>
                   <td>{getStatusBadge(sale.status)}</td>
                   <td>
                     <div style={{ display: 'flex', gap: '0.5rem' }}>
@@ -171,9 +171,13 @@ export default function AdminOrders() {
                                 <div key={item.id} style={{ display: 'flex', justifyContent: 'space-between', borderBottom: '1px solid var(--border-color)', paddingBottom: '0.5rem', marginBottom: '0.5rem' }}>
                                   <div style={{ display: 'flex', flexDirection: 'column' }}>
                                     <span>{item.product.name}</span>
-                                    <span style={{ fontSize: '0.8rem', color: 'var(--text-secondary)' }}>{item.quantity}x de R$ {item.price_applied.toLocaleString('pt-BR', {minimumFractionDigits:2})}</span>
+                                    <span style={{ fontSize: '0.8rem', color: 'var(--text-secondary)' }}>
+                                      {item.quantity}x {!sale.paymentMethod?.includes('credit') && `de R$ ${item.price_applied.toLocaleString('pt-BR', {minimumFractionDigits:2})}`}
+                                    </span>
                                   </div>
-                                  <span style={{ fontWeight: 'bold' }}>R$ {(item.quantity * item.price_applied).toLocaleString('pt-BR', {minimumFractionDigits:2})}</span>
+                                  {!sale.paymentMethod?.includes('credit') && (
+                                    <span style={{ fontWeight: 'bold' }}>R$ {(item.quantity * item.price_applied).toLocaleString('pt-BR', {minimumFractionDigits:2})}</span>
+                                  )}
                                 </div>
                               ))}
                             </div>

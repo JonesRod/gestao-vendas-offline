@@ -132,7 +132,9 @@ export default function StoreOrders() {
                   {order.items && order.items.map((item: any) => (
                     <div key={item.id} style={{ display: 'flex', justifyContent: 'space-between', color: 'var(--text-main)', fontSize: '0.95rem' }}>
                       <span>{item.quantity}x {item.product?.name || `Produto #${item.productId}`}</span>
-                      <span>R$ {(item.quantity * item.price_applied).toLocaleString('pt-BR', {minimumFractionDigits: 2})}</span>
+                      {!order.paymentMethod?.includes('credit') && (
+                        <span>R$ {(item.quantity * item.price_applied).toLocaleString('pt-BR', {minimumFractionDigits: 2})}</span>
+                      )}
                     </div>
                   ))}
                 </div>

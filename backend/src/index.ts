@@ -254,7 +254,7 @@ app.post('/api/sales', async (req, res) => {
         });
       }
 
-      if (saleData.customerId && saleData.paymentMethod === 'credit') {
+      if (saleData.customerId && saleData.paymentMethod.includes('credit')) {
          const customer = await tx.customer.findUnique({ where: { id: saleData.customerId }});
          if (customer) {
             const sumInstallments = installments && installments.length > 0 

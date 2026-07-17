@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useMemo } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { ShoppingCart, Trash2, Plus, Minus, ArrowLeft, CheckSquare, Square, CheckCircle } from 'lucide-react';
 import { useCart } from '../contexts/CartContext';
@@ -114,6 +114,54 @@ export default function StoreCart() {
     updatePaymentAmount(method, numericValue);
   };
 
+  const simulatedInstallments = useMemo(() => {
+    if (!payments.store_credit.selected || payments.store_credit.amount <= 0) return [];
+    
+    const installmentsMap = new Map<number, number>(); 
+    cart.forEach(item => {
+        const isPromo = item.product.is_promotional;
+        const creditPrice = isPromo && item.product.promo_price_credit ? item.product.promo_price_credit : item.product.price_credit;
+        const cashPrice = isPromo && item.product.promo_price_cash ? item.product.promo_price_cash : item.product.price_cash;
+        const price = item.product.credit_type === 'interest' ? cashPrice : creditPrice;
+        const itemInstallments = item.installments || 1;
+        const baseTotal = price * item.quantity;
+        let itemInterest = 0;
+        if (item.product.credit_type === 'interest') {
+            itemInterest = baseTotal * ((item.product.credit_interest_rate || 0) / 100) * itemInstallments;
+        }
+        const totalItem = baseTotal + itemInterest;
+        const valuePerInstallment = totalItem / itemInstallments;
+        
+        for (let i = 0; i < itemInstallments; i++) {
+            installmentsMap.set(i, (installmentsMap.get(i) || 0) + valuePerInstallment);
+        }
+    });
+
+    const totalCrediarioCarrinho = cartTotalCredit;
+    const razao = totalCrediarioCarrinho > 0 ? (payments.store_credit.amount / totalCrediarioCarrinho) : 1;
+    
+    const finalInstallments: { number: number, amount: number }[] = [];
+    let acumulado = 0;
+    
+    installmentsMap.forEach((valorMes, mesOffset) => {
+        const finalValue = valorMes * razao;
+        if (finalValue > 0) {
+            finalInstallments.push({
+                number: mesOffset + 1,
+                amount: finalValue,
+            });
+            acumulado += finalValue;
+        }
+    });
+
+    if (finalInstallments.length > 0) {
+        const diff = payments.store_credit.amount - acumulado;
+        finalInstallments[finalInstallments.length - 1].amount += diff;
+    }
+    
+    return finalInstallments;
+  }, [cart, payments.store_credit.selected, payments.store_credit.amount, cartTotalCredit]);
+
   const handleCheckout = async () => {
     const selectedKeys = Object.keys(payments).filter(k => payments[k as PaymentMethodType].selected) as PaymentMethodType[];
     
@@ -139,9 +187,17 @@ export default function StoreCart() {
     try {
       const items = cart.map(item => {
         const isPromo = item.product.is_promotional;
-        const price = isCreditMode 
+        let price = isCreditMode 
           ? (isPromo && item.product.promo_price_credit ? item.product.promo_price_credit : item.product.price_credit)
           : (isPromo && item.product.promo_price_cash ? item.product.promo_price_cash : item.product.price_cash);
+          
+        if (isCreditMode && item.product.credit_type === 'interest') {
+          const baseCashPrice = isPromo && item.product.promo_price_cash ? item.product.promo_price_cash : item.product.price_cash;
+          const itemInstallments = item.installments || 1;
+          const interest = baseCashPrice * ((item.product.credit_interest_rate || 0) / 100) * itemInstallments;
+          price = baseCashPrice + interest;
+        }
+        
         return {
           productId: item.product.id,
           quantity: item.quantity,
@@ -298,10 +354,18 @@ export default function StoreCart() {
             {cart.map((item) => {
               const product = item.product;
               const isPromo = product.is_promotional;
-              const price = isCreditMode 
-                ? (isPromo && product.promo_price_credit ? product.promo_price_credit : product.price_credit)
-                : (isPromo && product.promo_price_cash ? product.promo_price_cash : product.price_cash);
-              const mainImage = product.images && product.images.length > 0 ? product.images[0] : null;
+              let displayPrice = isCreditMode 
+              ? (isPromo && product.promo_price_credit ? product.promo_price_credit : product.price_credit)
+              : (isPromo && product.promo_price_cash ? product.promo_price_cash : product.price_cash);
+              
+            if (isCreditMode && product.credit_type === 'interest') {
+              const baseCashPrice = isPromo && product.promo_price_cash ? product.promo_price_cash : product.price_cash;
+              const itemInstallments = item.installments || 1;
+              const interest = baseCashPrice * ((product.credit_interest_rate || 0) / 100) * itemInstallments;
+              displayPrice = baseCashPrice + interest;
+            }
+            
+            const mainImage = product.images && product.images.length > 0 ? product.images[0] : null;
 
               return (
                 <div key={product.id} style={{ display: 'flex', gap: '1.5rem', paddingBottom: '1.5rem', borderBottom: '1px solid var(--border-color)' }}>
@@ -328,7 +392,7 @@ export default function StoreCart() {
                     <div style={{ display: 'flex', flexDirection: 'column', gap: '0.8rem', marginTop: '0.2rem' }}>
                       <div style={{ display: 'flex', alignItems: 'center', gap: '1.5rem', flexWrap: 'wrap' }}>
                         <div style={{ fontWeight: 'bold', color: isCreditMode ? 'var(--warning)' : 'var(--success)', fontSize: '1.1rem' }}>
-                          R$ {price.toLocaleString('pt-BR', {minimumFractionDigits: 2})}
+                          R$ {displayPrice.toLocaleString('pt-BR', {minimumFractionDigits: 2, maximumFractionDigits: 2})}
                           {isCreditMode && <span style={{ fontSize: '0.8rem', marginLeft: '0.5rem', fontWeight: 'normal' }}>(A Prazo)</span>}
                         </div>
                         
@@ -370,7 +434,7 @@ export default function StoreCart() {
                               }
                               return (
                                 <option key={n} value={n} style={{ background: 'var(--bg-panel)' }}>
-                                  {n}x de R$ {instValue.toLocaleString('pt-BR', {minimumFractionDigits: 2})} {product.credit_type === 'interest' ? '(com juros)' : ''}
+                                  {n}x de R$ {instValue.toLocaleString('pt-BR', {minimumFractionDigits: 2, maximumFractionDigits: 2})} {product.credit_type === 'interest' ? '(com juros)' : ''}
                                 </option>
                               );
                             })}
@@ -431,7 +495,7 @@ export default function StoreCart() {
 
             {hasActiveCredit && (
               <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem', marginTop: '0.5rem', paddingTop: '1rem', borderTop: '1px solid var(--border-color)' }}>
-                <div style={{ display: 'flex', alignItems: 'center', gap: '1rem', flexWrap: 'wrap' }}>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
                   <div 
                     onClick={() => togglePayment('store_credit')}
                     style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', cursor: 'pointer', color: 'var(--text-main)', minWidth: '160px' }}
@@ -440,28 +504,44 @@ export default function StoreCart() {
                     <span style={{ fontWeight: 'bold' }}>Crediário (A Prazo)</span>
                   </div>
                   {payments.store_credit.selected && (
-                    <div style={{ display: 'flex', alignItems: 'center', gap: '1rem', flex: 1, flexWrap: 'wrap' }}>
-                      <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
-                        <span style={{ color: 'var(--text-secondary)' }}>R$</span>
-                        <input 
-                          type="text"
-                          value={payments.store_credit.amount ? payments.store_credit.amount.toLocaleString('pt-BR', {minimumFractionDigits: 2, maximumFractionDigits: 2}) : ''}
-                          readOnly
-                          style={{ padding: '0.5rem', borderRadius: '4px', border: '1px solid var(--border-color)', background: 'var(--bg-panel)', color: 'var(--text-muted)', width: '120px', cursor: 'not-allowed' }}
-                          placeholder="0,00"
-                        />
-                      </div>
-                      
-                      <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
-                        <span style={{ color: 'var(--text-secondary)', fontSize: '0.9rem' }}>Vencimento:</span>
-                        <input 
-                          type="date" 
-                          min={new Date().toISOString().split('T')[0]}
-                          max={new Date(Date.now() + 40 * 24 * 60 * 60 * 1000).toISOString().split('T')[0]}
-                          value={creditDueDate}
-                          onChange={(e) => setCreditDueDate(e.target.value)}
-                          style={{ padding: '0.5rem', borderRadius: '4px', border: '1px solid var(--border-color)', background: 'var(--bg-main)', color: 'var(--text-main)', width: '150px' }}
-                        />
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem', width: '100%', paddingLeft: '0.5rem' }}>
+                      <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem', width: '100%' }}>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', flexWrap: 'wrap' }}>
+                          <span style={{ color: 'var(--text-secondary)', fontSize: '0.9rem', minWidth: '130px' }}>Vencimento Inicial:</span>
+                          <input 
+                            type="date" 
+                            min={new Date().toISOString().split('T')[0]}
+                            value={creditDueDate}
+                            onChange={(e) => setCreditDueDate(e.target.value)}
+                            style={{ flex: 1, padding: '0.5rem', borderRadius: '4px', border: '1px solid var(--border-color)', background: 'var(--bg-main)', color: 'var(--text-main)', minWidth: '130px' }}
+                          />
+                        </div>
+                        
+                        {simulatedInstallments.length > 0 && (
+                          <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
+                            {simulatedInstallments.map((inst, index) => {
+                              // Adiciona UTC no final para evitar problemas de fuso horário ao instanciar a data do input
+                              const dateParts = creditDueDate.split('-');
+                              const instDate = new Date(Number(dateParts[0]), Number(dateParts[1]) - 1, Number(dateParts[2]));
+                              instDate.setMonth(instDate.getMonth() + index);
+                              return (
+                                <div key={index} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '0.6rem 0.8rem', background: 'var(--bg-panel)', borderRadius: '4px', border: '1px solid var(--border-color)', gap: '0.5rem' }}>
+                                  <div style={{ display: 'flex', flexDirection: 'column', gap: '0.2rem' }}>
+                                    <span style={{ color: 'var(--text-main)', fontSize: '0.85rem', fontWeight: 500 }}>
+                                      Parcela {index + 1}/{simulatedInstallments.length}
+                                    </span>
+                                    <span style={{ color: 'var(--text-secondary)', fontSize: '0.8rem' }}>
+                                      Venc: {instDate.toLocaleDateString('pt-BR')}
+                                    </span>
+                                  </div>
+                                  <span style={{ fontWeight: 600, color: 'var(--text-main)', whiteSpace: 'nowrap', fontSize: '0.95rem' }}>
+                                    R$ {inst.amount.toLocaleString('pt-BR', {minimumFractionDigits: 2, maximumFractionDigits: 2})}
+                                  </span>
+                                </div>
+                              );
+                            })}
+                          </div>
+                        )}
                       </div>
                     </div>
                   )}
@@ -473,7 +553,7 @@ export default function StoreCart() {
           <div style={{ marginTop: '1.5rem', padding: '1rem', background: 'var(--bg-main)', borderRadius: '8px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
              <span style={{ color: 'var(--text-secondary)' }}>Falta preencher:</span>
              <span style={{ color: Math.abs(remaining) < 0.05 ? 'var(--success)' : 'var(--danger)', fontWeight: 'bold' }}>
-               R$ {remaining.toLocaleString('pt-BR', {minimumFractionDigits: 2})}
+               R$ {remaining.toLocaleString('pt-BR', {minimumFractionDigits: 2, maximumFractionDigits: 2})}
              </span>
           </div>
         </div>
@@ -484,7 +564,7 @@ export default function StoreCart() {
           <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem', marginBottom: '2rem' }}>
             <div style={{ display: 'flex', justifyContent: 'space-between', color: 'var(--text-secondary)' }}>
               <span>Subtotal ({cart.length} itens)</span>
-              <span>R$ {currentTotal.toLocaleString('pt-BR', {minimumFractionDigits: 2})}</span>
+              <span>R$ {currentTotal.toLocaleString('pt-BR', {minimumFractionDigits: 2, maximumFractionDigits: 2})}</span>
             </div>
             <div style={{ display: 'flex', justifyContent: 'space-between', color: 'var(--text-secondary)' }}>
               <span>Tabela de Preços</span>
@@ -503,7 +583,7 @@ export default function StoreCart() {
                   return (
                     <div key={method} style={{ display: 'flex', justifyContent: 'space-between', color: 'var(--text-main)', fontSize: '0.95rem' }}>
                       <span>{methodLabels[method]}</span>
-                      <span>R$ {payments[method].amount.toLocaleString('pt-BR', {minimumFractionDigits: 2})}</span>
+                      <span>R$ {payments[method].amount.toLocaleString('pt-BR', {minimumFractionDigits: 2, maximumFractionDigits: 2})}</span>
                     </div>
                   );
                 })}
@@ -512,7 +592,7 @@ export default function StoreCart() {
 
             <div style={{ borderTop: '1px solid var(--border-color)', paddingTop: '1rem', display: 'flex', justifyContent: 'space-between', color: 'var(--text-main)', fontWeight: 'bold', fontSize: '1.2rem' }}>
               <span>Total Estimado</span>
-              <span>R$ {currentTotal.toLocaleString('pt-BR', {minimumFractionDigits: 2})}</span>
+              <span>R$ {currentTotal.toLocaleString('pt-BR', {minimumFractionDigits: 2, maximumFractionDigits: 2})}</span>
             </div>
           </div>
           
