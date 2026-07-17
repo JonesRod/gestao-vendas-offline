@@ -67,6 +67,8 @@ model Product {
   categoryId                   Int?
   category                     Category? @relation(fields: [categoryId], references: [id])
   allow_credit                 Boolean?
+  credit_type                  String?  @default("fixed")
+  credit_interest_rate         Float?   @default(0)
   max_installments             Int?
   punctuality_discount_active  Boolean? @default(false)
   punctuality_discount_percent Float?   @default(0)

@@ -18,7 +18,7 @@ export default function Inventory() {
   const [modalType, setModalType] = useState<'product' | 'kit'>('product');
   
   const initialFormState: Partial<Product> = {
-    name: '', description: '', cost: 0, margin_cash: 0, margin_credit: 0, price_cash: 0, price_credit: 0, stock: 0, is_active: true, images: [], type: 'product', allow_credit: true, max_installments: 1, punctuality_discount_active: false, punctuality_discount_percent: 0, punctuality_discount_value: 0, loyalty_discount_active: false, loyalty_discount_percent: 0, loyalty_discount_value: 0, is_promotional: false, promo_price_cash: 0, promo_price_credit: 0, promo_start_date: '', promo_end_date: ''
+    name: '', description: '', cost: 0, margin_cash: 0, margin_credit: 0, price_cash: 0, price_credit: 0, stock: 0, is_active: true, images: [], type: 'product', allow_credit: true, credit_type: 'fixed', credit_interest_rate: 0, max_installments: 1, punctuality_discount_active: false, punctuality_discount_percent: 0, punctuality_discount_value: 0, loyalty_discount_active: false, loyalty_discount_percent: 0, loyalty_discount_value: 0, is_promotional: false, promo_price_cash: 0, promo_price_credit: 0, promo_start_date: '', promo_end_date: ''
   };
   const [formData, setFormData] = useState<Partial<Product>>(initialFormState);
   
@@ -283,6 +283,8 @@ export default function Inventory() {
       type: modalType,
       kit_items: modalType === 'kit' ? formData.kit_items || [] : [],
       allow_credit: formData.allow_credit !== false,
+      credit_type: formData.credit_type || 'fixed',
+      credit_interest_rate: Number(formData.credit_interest_rate) || 0,
       max_installments: Number(formData.max_installments) || 1,
       punctuality_discount_active: formData.punctuality_discount_active || false,
       punctuality_discount_percent: Number(formData.punctuality_discount_percent) || 0,
@@ -412,7 +414,18 @@ export default function Inventory() {
                 </div>
                 <div className="price-group">
                   <span className="price-label">Prazo/Crédito</span>
-                  <span className="price-value credit">R$ {product.price_credit.toLocaleString('pt-BR', {minimumFractionDigits: 2, maximumFractionDigits: 2})}</span>
+                  <span className="price-value credit">
+                    {(() => {
+                      if (product.credit_type === 'interest') {
+                        const maxInst = product.max_installments || 1;
+                        const basePrice = product.price_cash;
+                        const interest = basePrice * ((product.credit_interest_rate || 0) / 100) * maxInst;
+                        const instValue = (basePrice + interest) / maxInst;
+                        return `${maxInst}x de R$ ${instValue.toLocaleString('pt-BR', {minimumFractionDigits: 2, maximumFractionDigits: 2})}`;
+                      }
+                      return `R$ ${product.price_credit.toLocaleString('pt-BR', {minimumFractionDigits: 2, maximumFractionDigits: 2})}`;
+                    })()}
+                  </span>
                 </div>
               </div>
 
@@ -609,16 +622,7 @@ export default function Inventory() {
                 </div>
               </div>
 
-              <div className="form-row">
-                <div className="form-group">
-                  <label>Margem a Prazo (%)</label>
-                  <input type="text" value={maskCurrency(formData.margin_credit || 0)} onChange={e => handleMarginChange('credit', e.target.value)} />
-                </div>
-                <div className="form-group">
-                  <label>Preço Fiado / Prazo (R$)</label>
-                  <input type="text" required value={maskCurrency(formData.price_credit || 0)} onChange={e => handlePriceChange('credit', e.target.value)} />
-                </div>
-              </div>
+
 
               {/* Seção de Promoção em Destaque */}
               <div style={{ marginTop: '1.5rem', border: '2px dashed var(--primary)', borderRadius: '8px', padding: '1rem', background: 'rgba(108, 92, 231, 0.05)' }}>
@@ -634,10 +638,12 @@ export default function Inventory() {
                         <label style={{ color: 'var(--text-main)' }}>Valor Promocional à Vista (R$)</label>
                         <input type="text" required value={maskCurrency(formData.promo_price_cash || 0)} onChange={e => handlePromoPriceChange('cash', e.target.value)} style={{ borderColor: 'var(--primary)' }} />
                       </div>
-                      <div className="form-group">
-                        <label style={{ color: 'var(--text-main)' }}>Valor Promocional a Prazo (R$)</label>
-                        <input type="text" required value={maskCurrency(formData.promo_price_credit || 0)} onChange={e => handlePromoPriceChange('credit', e.target.value)} style={{ borderColor: 'var(--primary)' }} />
-                      </div>
+                      {formData.credit_type !== 'interest' && (
+                        <div className="form-group">
+                          <label style={{ color: 'var(--text-main)' }}>Valor Promocional a Prazo (R$)</label>
+                          <input type="text" required value={maskCurrency(formData.promo_price_credit || 0)} onChange={e => handlePromoPriceChange('credit', e.target.value)} style={{ borderColor: 'var(--primary)' }} />
+                        </div>
+                      )}
                     </div>
                     <div className="form-row" style={{ marginTop: '1rem' }}>
                       <div className="form-group">
@@ -665,6 +671,41 @@ export default function Inventory() {
             </div>
             {formData.allow_credit !== false && (
               <>
+                <div style={{ marginTop: '1rem', display: 'flex', flexDirection: 'column', gap: '1rem', background: 'rgba(255,255,255,0.02)', padding: '1rem', borderRadius: '8px', border: '1px solid rgba(255,255,255,0.05)' }}>
+                  <p style={{ margin: 0, fontSize: '0.95rem', color: 'var(--text-main)', fontWeight: 'bold' }}>Modelo de Crediário:</p>
+                  <div style={{ display: 'flex', gap: '2rem', alignItems: 'center', flexWrap: 'wrap' }}>
+                    <label style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', cursor: 'pointer', color: 'var(--text-main)', fontSize: '0.9rem' }}>
+                      <input type="radio" name="credit_type" value="fixed" checked={formData.credit_type !== 'interest'} onChange={() => setFormData({...formData, credit_type: 'fixed'})} />
+                      Preço a Prazo (Fixo)
+                    </label>
+                    <label style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', cursor: 'pointer', color: 'var(--text-main)', fontSize: '0.9rem' }}>
+                      <input type="radio" name="credit_type" value="interest" checked={formData.credit_type === 'interest'} onChange={() => setFormData({...formData, credit_type: 'interest'})} />
+                      Com Juros ao Mês
+                    </label>
+                  </div>
+                  
+                  {formData.credit_type !== 'interest' && modalType === 'product' && (
+                    <div className="form-row" style={{ marginTop: '1rem', paddingTop: '1rem', borderTop: '1px solid rgba(255,255,255,0.05)' }}>
+                      <div className="form-group">
+                        <label>Margem a Prazo (%)</label>
+                        <input type="text" value={maskCurrency(formData.margin_credit || 0)} onChange={e => handleMarginChange('credit', e.target.value)} />
+                      </div>
+                      <div className="form-group">
+                        <label>Preço Fiado / Prazo (R$)</label>
+                        <input type="text" required value={maskCurrency(formData.price_credit || 0)} onChange={e => handlePriceChange('credit', e.target.value)} />
+                      </div>
+                    </div>
+                  )}
+                </div>
+                
+                {formData.credit_type === 'interest' && (
+                  <div style={{ marginTop: '0.8rem', display: 'flex', alignItems: 'center', gap: '1rem', background: 'rgba(239, 68, 68, 0.05)', padding: '0.5rem 1rem', borderRadius: '8px', border: '1px solid rgba(239, 68, 68, 0.2)' }}>
+                    <span style={{ fontSize: '0.9rem', color: 'var(--text-main)' }}>Taxa de Juros ao Mês:</span>
+                    <input type="number" min="0" step="0.01" value={formData.credit_interest_rate || 0} onChange={e => setFormData({...formData, credit_interest_rate: Number(e.target.value)})} style={{ width: '80px', padding: '0.5rem' }} />
+                    <span style={{ fontSize: '0.9rem', color: 'var(--text-muted)' }}>%</span>
+                  </div>
+                )}
+
                 <div style={{ marginTop: '0.8rem', display: 'flex', alignItems: 'center', gap: '1rem', background: 'rgba(255,255,255,0.02)', padding: '0.5rem 1rem', borderRadius: '8px', border: '1px solid rgba(255,255,255,0.05)' }}>
                   <span style={{ fontSize: '0.9rem', color: 'var(--text-muted)' }}>Dividir em até:</span>
                   <input type="number" min="1" max="24" value={formData.max_installments || 1} onChange={e => setFormData({...formData, max_installments: Number(e.target.value)})} style={{ width: '80px', padding: '0.5rem' }} />

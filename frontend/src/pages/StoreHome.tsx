@@ -122,7 +122,16 @@ export default function StoreHome() {
               <div className="price-item">
                 <span className="price-label">A Prazo</span>
                 <span className="current-price text-warning">
-                  R$ {priceCredit.toLocaleString('pt-BR', {minimumFractionDigits: 2})}
+                  {(() => {
+                    if (product.credit_type === 'interest') {
+                      const maxInst = product.max_installments || 1;
+                      const basePrice = priceCash; // Uses the already determined cash price (which considers promos)
+                      const interest = basePrice * ((product.credit_interest_rate || 0) / 100) * maxInst;
+                      const instValue = (basePrice + interest) / maxInst;
+                      return `${maxInst}x de R$ ${instValue.toLocaleString('pt-BR', {minimumFractionDigits: 2, maximumFractionDigits: 2})}`;
+                    }
+                    return `R$ ${priceCredit.toLocaleString('pt-BR', {minimumFractionDigits: 2})}`;
+                  })()}
                 </span>
               </div>
             )}

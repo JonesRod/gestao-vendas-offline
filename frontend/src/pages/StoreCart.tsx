@@ -174,9 +174,16 @@ export default function StoreCart() {
         
         cart.forEach(item => {
            const isPromo = item.product.is_promotional;
-           const price = isPromo && item.product.promo_price_credit ? item.product.promo_price_credit : item.product.price_credit;
-           const totalItem = price * item.quantity;
+           const creditPrice = isPromo && item.product.promo_price_credit ? item.product.promo_price_credit : item.product.price_credit;
+           const cashPrice = isPromo && item.product.promo_price_cash ? item.product.promo_price_cash : item.product.price_cash;
+           const price = item.product.credit_type === 'interest' ? cashPrice : creditPrice;
            const itemInstallments = item.installments || 1;
+           const baseTotal = price * item.quantity;
+           let itemInterest = 0;
+           if (item.product.credit_type === 'interest') {
+              itemInterest = baseTotal * ((item.product.credit_interest_rate || 0) / 100) * itemInstallments;
+           }
+           const totalItem = baseTotal + itemInterest;
            const valuePerInstallment = totalItem / itemInstallments;
            
            for (let i = 0; i < itemInstallments; i++) {
@@ -353,10 +360,17 @@ export default function StoreCart() {
                             style={{ background: 'transparent', color: 'var(--text-main)', border: 'none', fontSize: '0.85rem', outline: 'none', cursor: 'pointer', fontWeight: 500, maxWidth: '100%', textOverflow: 'ellipsis' }}
                           >
                             {Array.from({ length: product.max_installments || 1 }, (_, i) => i + 1).map(n => {
-                              const creditPrice = product.is_promotional && product.promo_price_credit ? product.promo_price_credit : product.price_credit;
+                              const baseCreditPrice = product.is_promotional && product.promo_price_credit ? product.promo_price_credit : product.price_credit;
+                              const baseCashPrice = product.is_promotional && product.promo_price_cash ? product.promo_price_cash : product.price_cash;
+                              const basePrice = product.credit_type === 'interest' ? baseCashPrice : baseCreditPrice;
+                              let instValue = basePrice / n;
+                              if (product.credit_type === 'interest') {
+                                const interest = basePrice * ((product.credit_interest_rate || 0) / 100) * n;
+                                instValue = (basePrice + interest) / n;
+                              }
                               return (
                                 <option key={n} value={n} style={{ background: 'var(--bg-panel)' }}>
-                                  {n}x de R$ {(creditPrice / n).toLocaleString('pt-BR', {minimumFractionDigits: 2})}
+                                  {n}x de R$ {instValue.toLocaleString('pt-BR', {minimumFractionDigits: 2})} {product.credit_type === 'interest' ? '(com juros)' : ''}
                                 </option>
                               );
                             })}

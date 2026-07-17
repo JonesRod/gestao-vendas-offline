@@ -154,9 +154,16 @@ Obrigado pela preferência!`;
   const isCreditSale = 'cartao_credito' in splitPayments || 'fiado' in splitPayments;
 
   const currentTotal = cart.reduce((sum, item) => {
-    const price = !isCreditSale ? item.price_cash : item.price_credit;
+    const price = (!isCreditSale || item.credit_type === 'interest') ? item.price_cash : item.price_credit;
     const discount = parseFloat(item.discount?.replace(',', '.') || '0');
-    return sum + (price * item.quantity) - discount;
+    const itemBaseTotal = (price * item.quantity) - discount;
+    let interest = 0;
+    if (isCreditSale && item.credit_type === 'interest') {
+      const rate = (item.credit_interest_rate || 0) / 100;
+      const instCount = item.selected_installments || 1;
+      interest = itemBaseTotal * rate * instCount;
+    }
+    return sum + itemBaseTotal + interest;
   }, 0);
 
   useEffect(() => {
@@ -274,7 +281,12 @@ Obrigado pela preferência!`;
           const remainingAmount = amount - itemDownPayment;
 
           const installmentsCount = item.selected_installments || 1;
-          const installmentValue = remainingAmount / installmentsCount;
+          let itemInterest = 0;
+          if (item.credit_type === 'interest') {
+            itemInterest = remainingAmount * ((item.credit_interest_rate || 0) / 100) * installmentsCount;
+          }
+          const finalAmount = remainingAmount + itemInterest;
+          const installmentValue = finalAmount / installmentsCount;
 
           const itemTotalPunctuality = item.punctuality_discount_active ? (item.punctuality_discount_value || 0) * item.quantity : 0;
           const punctualityPerInstallment = itemTotalPunctuality / installmentsCount;
@@ -551,9 +563,14 @@ Obrigado pela preferência!`;
                   </tr>
                 ) : (
                   cart.map(item => {
-                    const itemPrice = !isCreditSale ? item.price_cash : item.price_credit;
+                    const itemPrice = (!isCreditSale || item.credit_type === 'interest') ? item.price_cash : item.price_credit;
                     const discount = parseFloat(item.discount?.replace(',', '.') || '0');
-                    const totalItem = (itemPrice * item.quantity) - discount;
+                    const itemBaseTotal = (itemPrice * item.quantity) - discount;
+                    let itemTotalInterest = 0;
+                    if (isCreditSale && item.credit_type === 'interest') {
+                       itemTotalInterest = itemBaseTotal * ((item.credit_interest_rate || 0) / 100) * (item.selected_installments || 1);
+                    }
+                    const totalItem = itemBaseTotal + itemTotalInterest;
                     return (
                       <tr key={item.id}>
                         <td>
@@ -582,9 +599,19 @@ Obrigado pela preferência!`;
                                 onChange={(e) => updateItemInstallments(item.id, Number(e.target.value))}
                                 className="installments-select"
                               >
-                                {Array.from({ length: item.max_installments || 1 }).map((_, i) => (
-                                  <option key={i+1} value={i+1}>{i+1}x</option>
-                                ))}
+                                {Array.from({ length: item.max_installments || 1 }).map((_, i) => {
+                                  const instCount = i + 1;
+                                  let instValue = itemBaseTotal / instCount;
+                                  if (item.credit_type === 'interest') {
+                                    const interest = itemBaseTotal * ((item.credit_interest_rate || 0) / 100) * instCount;
+                                    instValue = (itemBaseTotal + interest) / instCount;
+                                  }
+                                  return (
+                                    <option key={instCount} value={instCount}>
+                                      {instCount}x {item.credit_type === 'interest' ? `(R$ ${instValue.toLocaleString('pt-BR', {minimumFractionDigits: 2})})` : ''}
+                                    </option>
+                                  )
+                                })}
                               </select>
                             ) : (
                               <span className="text-danger" style={{fontSize: '0.8rem'}}>Não permite fiado</span>

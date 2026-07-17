@@ -75,10 +75,20 @@ export function CartProvider({ children }: { children: React.ReactNode }) {
   }, 0);
 
   const cartTotalCredit = cart.reduce((total, item) => {
-    const price = item.product.is_promotional && item.product.promo_price_credit 
-      ? item.product.promo_price_credit 
-      : item.product.price_credit;
-    return total + (price * item.quantity);
+    const isPromo = item.product.is_promotional;
+    const baseCreditPrice = isPromo && item.product.promo_price_credit ? item.product.promo_price_credit : item.product.price_credit;
+    const baseCashPrice = isPromo && item.product.promo_price_cash ? item.product.promo_price_cash : item.product.price_cash;
+    
+    const price = item.product.credit_type === 'interest' ? baseCashPrice : baseCreditPrice;
+    
+    const itemBaseTotal = price * item.quantity;
+    let interest = 0;
+    if (item.product.credit_type === 'interest') {
+      const rate = (item.product.credit_interest_rate || 0) / 100;
+      interest = itemBaseTotal * rate * (item.installments || 1);
+    }
+
+    return total + itemBaseTotal + interest;
   }, 0);
 
   const cartCount = cart.reduce((count, item) => count + item.quantity, 0);
