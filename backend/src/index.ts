@@ -643,11 +643,11 @@ app.post('/api/auth/login', async (req, res) => {
 
 // Registrar Cliente (Loja)
 app.post('/api/auth/register', async (req, res) => {
-  const { name, cpf, email, phone, password } = req.body;
+  const { name, cpf, email, phone, birth_date, password } = req.body;
   const cleanCpf = cpf?.replace(/\D/g, '');
 
-  if (!name || !cleanCpf || !phone || !password) {
-    return res.status(400).json({ error: 'Preencha os campos obrigatórios: Nome, CPF, Celular e Senha.' });
+  if (!name || !cleanCpf || !phone || !password || !birth_date) {
+    return res.status(400).json({ error: 'Preencha os campos obrigatórios: Nome, Data de Nasc., CPF, Celular e Senha.' });
   }
 
   try {
@@ -664,6 +664,7 @@ app.post('/api/auth/register', async (req, res) => {
         cpf: cleanCpf,
         email,
         phone,
+        birth_date,
         password: hashedPassword,
         credit_limit: 0,
         credit_used: 0,

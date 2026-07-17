@@ -1,8 +1,8 @@
 import React, { useState } from 'react';
 import { useNavigate, Link } from 'react-router-dom';
-import { User, Store, ChevronRight, Mail, Phone, Lock, EyeOff, Eye } from 'lucide-react';
+import { User, Store, ChevronRight, Mail, Phone, Lock, EyeOff, Eye, Calendar } from 'lucide-react';
 import { api } from '../services/api';
-import { maskCPF, maskPhone } from '../utils/masks';
+import { maskCPF, maskPhone, maskDate } from '../utils/masks';
 import './Login.css';
 
 export default function Register() {
@@ -11,6 +11,7 @@ export default function Register() {
     cpf: '',
     email: '',
     phone: '',
+    birth_date: '',
     password: ''
   });
   const [showPassword, setShowPassword] = useState(false);
@@ -27,14 +28,36 @@ export default function Register() {
     setFormData({ ...formData, phone: maskPhone(e.target.value) });
   };
 
+  const handleBirthDateChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    setFormData({ ...formData, birth_date: maskDate(e.target.value) });
+  };
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (formData.cpf.replace(/\D/g, '').length < 11) {
       setError('CPF inválido.');
       return;
     }
-    if (!formData.name || !formData.phone || !formData.password) {
-      setError('Preencha os campos obrigatórios (Nome, Celular e Senha).');
+    if (!formData.name || !formData.phone || !formData.password || !formData.birth_date) {
+      setError('Preencha os campos obrigatórios (Nome, Data de Nasc., Celular e Senha).');
+      return;
+    }
+
+    if (formData.birth_date.length === 10) {
+      const [day, month, year] = formData.birth_date.split('/');
+      const birthDateObj = new Date(Number(year), Number(month) - 1, Number(day));
+      const today = new Date();
+      let age = today.getFullYear() - birthDateObj.getFullYear();
+      const m = today.getMonth() - birthDateObj.getMonth();
+      if (m < 0 || (m === 0 && today.getDate() < birthDateObj.getDate())) {
+        age--;
+      }
+      if (age < 18) {
+        setError('Você precisa ter pelo menos 18 anos para se cadastrar.');
+        return;
+      }
+    } else {
+      setError('Data de nascimento inválida.');
       return;
     }
     
@@ -115,17 +138,34 @@ export default function Register() {
             </div>
           </div>
 
-          <div className="input-group">
-            <label htmlFor="email">E-mail</label>
-            <div className="input-with-icon">
-              <Mail />
-              <input
-                type="email"
-                id="email"
-                placeholder="seu@email.com"
-                value={formData.email}
-                onChange={e => setFormData({ ...formData, email: e.target.value })}
-              />
+          <div className="form-row" style={{ display: 'flex', gap: '1rem' }}>
+            <div className="input-group" style={{ flex: 1 }}>
+              <label htmlFor="birth_date">Data Nasc. *</label>
+              <div className="input-with-icon">
+                <Calendar />
+                <input
+                  type="text"
+                  id="birth_date"
+                  placeholder="DD/MM/AAAA"
+                  value={formData.birth_date}
+                  onChange={handleBirthDateChange}
+                  required
+                />
+              </div>
+            </div>
+
+            <div className="input-group" style={{ flex: 1 }}>
+              <label htmlFor="email">E-mail</label>
+              <div className="input-with-icon">
+                <Mail />
+                <input
+                  type="email"
+                  id="email"
+                  placeholder="seu@email.com"
+                  value={formData.email}
+                  onChange={e => setFormData({ ...formData, email: e.target.value })}
+                />
+              </div>
             </div>
           </div>
 

@@ -148,6 +148,10 @@ export default function Login() {
             <button type="submit" className="login-btn" disabled={loading}>
               {loading ? 'Verificando...' : 'Continuar'} <ChevronRight size={18} style={{ marginLeft: 8 }} />
             </button>
+            <div style={{ textAlign: 'center', marginTop: '1.5rem', fontSize: '0.9rem' }}>
+              <span style={{ color: 'var(--text-muted)' }}>Não tem uma conta? </span>
+              <Link to="/register" style={{ color: 'var(--primary)', textDecoration: 'none', fontWeight: 'bold' }}>Cadastre-se</Link>
+            </div>
           </form>
         )}
 
