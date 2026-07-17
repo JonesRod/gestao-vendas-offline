@@ -641,6 +641,46 @@ app.post('/api/auth/login', async (req, res) => {
   return res.json({ token, role, user: safeUserDetails });
 });
 
+// Registrar Cliente (Loja)
+app.post('/api/auth/register', async (req, res) => {
+  const { name, cpf, email, phone, password } = req.body;
+  const cleanCpf = cpf?.replace(/\D/g, '');
+
+  if (!name || !cleanCpf || !phone || !password) {
+    return res.status(400).json({ error: 'Preencha os campos obrigatórios: Nome, CPF, Celular e Senha.' });
+  }
+
+  try {
+    const existing = await findUserByCpf(prisma.customer, cleanCpf);
+    if (existing) {
+      return res.status(400).json({ error: 'Já existe um cliente cadastrado com este CPF.' });
+    }
+
+    const hashedPassword = await bcrypt.hash(password, 10);
+
+    const newCustomer = await prisma.customer.create({
+      data: {
+        name,
+        cpf: cleanCpf,
+        email,
+        phone,
+        password: hashedPassword,
+        credit_limit: 0,
+        credit_used: 0,
+        due_date: 10,
+        is_blocked: false,
+        is_loyal: false,
+      }
+    });
+
+    const { password: _, ...safeCustomer } = newCustomer;
+    res.json({ success: true, customer: safeCustomer });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: 'Erro ao cadastrar cliente.' });
+  }
+});
+
 // Recuperação de senha simulada
 app.post('/api/auth/forgot-password', async (req, res) => {
   const { cpf, method } = req.body;
