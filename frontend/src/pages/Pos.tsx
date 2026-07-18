@@ -76,7 +76,7 @@ export default function Pos() {
     let productsText = '';
     if (saleData.cart && saleData.cart.length > 0) {
        productsText = saleData.cart.map((i: any) => {
-         const price = !saleData.isCreditSale ? i.price_cash : i.price_credit;
+         const price = (!saleData.isCreditSale || i.credit_type === 'interest') ? i.price_cash : i.price_credit;
          const discount = parseFloat(i.discount?.replace(',', '.') || '0');
          const itemBaseTotal = (price * i.quantity) - discount;
          let itemTotalInterest = 0;
@@ -99,11 +99,21 @@ export default function Pos() {
     if (saleData.isCreditSale) {
        if (saleData.downPayment > 0) {
          extraInfo += `\n*Entrada (Paga):* R$ ${saleData.downPayment.toLocaleString('pt-BR', {minimumFractionDigits: 2, maximumFractionDigits: 2})}`;
+         extraInfo += `\n*Restante (a Prazo):* R$ ${(saleData.total - saleData.downPayment).toLocaleString('pt-BR', {minimumFractionDigits: 2, maximumFractionDigits: 2})}`;
        }
        if (saleData.installments && saleData.installments.length > 0) {
          extraInfo += '\n\n*Vencimentos / Parcelas:*';
-         saleData.installments.forEach((inst: any, idx: number) => {
-           extraInfo += `\n${idx + 1}ª Parc: ${new Date(inst.due_date).toLocaleDateString('pt-BR')} - R$ ${inst.amount.toLocaleString('pt-BR', {minimumFractionDigits: 2, maximumFractionDigits: 2})}`;
+         const grouped = new Map();
+         saleData.installments.forEach((inst: any) => {
+           const dateStr = new Date(inst.due_date).toLocaleDateString('pt-BR');
+           if (!grouped.has(dateStr)) {
+             grouped.set(dateStr, { amount: 0, date: dateStr, dateObj: new Date(inst.due_date) });
+           }
+           grouped.get(dateStr).amount += inst.amount;
+         });
+         const sorted = Array.from(grouped.values()).sort((a, b) => a.dateObj.getTime() - b.dateObj.getTime());
+         sorted.forEach((inst, idx) => {
+           extraInfo += `\n${idx + 1}ª Parc: ${inst.date} - R$ ${inst.amount.toLocaleString('pt-BR', {minimumFractionDigits: 2, maximumFractionDigits: 2})}`;
          });
        }
     }
@@ -129,11 +139,19 @@ ${productsText}
 -----------------------------------
 Obrigado pela preferência!`;
 
+    let phoneStr = '';
+    if (saleData.customer && saleData.customer.phone) {
+      phoneStr = saleData.customer.phone.replace(/\D/g, '');
+      if (phoneStr.length === 10 || phoneStr.length === 11) {
+        phoneStr = '55' + phoneStr;
+      }
+    }
+
     if (navigator.share) {
       try { await navigator.share({ title: 'Recibo de Venda', text }); } 
-      catch (e) { if ((e as any).name !== 'AbortError') window.open(`https://wa.me/?text=${encodeURIComponent(text)}`, '_blank'); }
+      catch (e) { if ((e as any).name !== 'AbortError') window.open(`https://wa.me/${phoneStr}?text=${encodeURIComponent(text)}`, '_blank'); }
     } else {
-      window.open(`https://wa.me/?text=${encodeURIComponent(text)}`, '_blank');
+      window.open(`https://wa.me/${phoneStr}?text=${encodeURIComponent(text)}`, '_blank');
     }
   };
 
@@ -361,7 +379,7 @@ Obrigado pela preferência!`;
 
       await api.post('/sales', payload);
 
-      setLastSaleData({
+      const saleDataObj = {
         cart: [...cart],
         total: currentTotal,
         paymentMethod: finalPaymentMethodStr,
@@ -370,7 +388,9 @@ Obrigado pela preferência!`;
         date: new Date(),
         installments: allInstallments,
         downPayment: parseFloat(downPayment.replace(/\./g, '').replace(',', '.')) || 0
-      });
+      };
+
+      setLastSaleData(saleDataObj);
 
       setCart([]);
       setSelectedCustomer(null);
@@ -385,6 +405,13 @@ Obrigado pela preferência!`;
       setShowSuccess(true);
       
       loadData();
+
+      // Auto-trigger WhatsApp if customer has phone
+      if (saleDataObj.customer && saleDataObj.customer.phone) {
+        setTimeout(() => {
+          shareSaleReceipt(saleDataObj);
+        }, 300);
+      }
 
     } catch (error) {
       console.error("Erro ao salvar venda:", error);

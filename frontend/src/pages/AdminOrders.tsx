@@ -1,8 +1,26 @@
 import React, { useState, useEffect } from 'react';
 import { api } from '../services/api';
-import { Package, ArrowLeft, Calendar, CreditCard, Clock, CheckCircle, XCircle, FileText, Search, User, ChevronDown, ChevronUp } from 'lucide-react';
+import { Package, CreditCard, Clock, CheckCircle, XCircle, FileText, Search, User, ChevronDown, ChevronUp } from 'lucide-react';
 import { useLocation } from 'react-router-dom';
 import Modal from '../components/Modal';
+
+const formatPaymentMethod = (methodStr: string): string => {
+  if (!methodStr) return '-';
+  try {
+    if (methodStr.startsWith('[')) {
+      const parsed = JSON.parse(methodStr);
+      return parsed.map((p: any) => formatPaymentMethod(p.method)).join(' + ');
+    }
+  } catch(e) {}
+  
+  if (methodStr.includes('fiado')) return 'Crediário';
+  if (methodStr.includes('dinheiro')) return 'Dinheiro';
+  if (methodStr.includes('pix')) return 'Pix';
+  if (methodStr.includes('cartao_credito')) return 'Cartão de Crédito';
+  if (methodStr.includes('cartao_debito')) return 'Cartão de Débito';
+  
+  return methodStr.replace(' | credit', '');
+};
 
 export default function AdminOrders() {
   const location = useLocation();
@@ -129,7 +147,7 @@ export default function AdminOrders() {
                   <td>{new Date(sale.date).toLocaleString('pt-BR')}</td>
                   <td>{sale.customer ? sale.customer.name : <span style={{ color: 'var(--text-muted)' }}>Sem Identificação</span>}</td>
                   <td style={{ fontWeight: 'bold' }}>R$ {sale.totalAmount.toLocaleString('pt-BR', {minimumFractionDigits:2, maximumFractionDigits:2})}</td>
-                  <td>{sale.paymentMethod.replace(' | credit', '')}</td>
+                  <td>{formatPaymentMethod(sale.paymentMethod)}</td>
                   <td>{getStatusBadge(sale.status)}</td>
                   <td>
                     <div style={{ display: 'flex', gap: '0.5rem' }}>
