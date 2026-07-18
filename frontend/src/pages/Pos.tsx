@@ -125,7 +125,7 @@ export default function Pos() {
 *Produto(s):*
 ${productsText}
 -----------------------------------
-*Forma de Pagamento:* ${saleData.isCreditSale ? 'Fiado/Cartão' : 'Dinheiro/Pix'}${extraInfo}
+*Forma de Pagamento:* ${saleData.isCreditSale ? 'Crediário/Cartão' : 'Dinheiro/Pix'}${extraInfo}
 -----------------------------------
 Obrigado pela preferência!`;
 
@@ -240,13 +240,13 @@ Obrigado pela preferência!`;
     if (isCreditSale) {
       const forbiddenProducts = cart.filter(item => item.allow_credit === false);
       if (forbiddenProducts.length > 0) {
-        setAlertMessage("Há itens no carrinho que NÃO permitem venda a prazo (fiado/cartão): " + forbiddenProducts.map(i => i.name).join(', '));
+        setAlertMessage("Há itens no carrinho que NÃO permitem venda a prazo (crediário/cartão): " + forbiddenProducts.map(i => i.name).join(', '));
         return;
       }
 
       if ('fiado' in splitPayments) {
         if (!selectedCustomer) {
-          setAlertMessage("Para vendas no fiado, é obrigatório vincular um cliente!");
+          setAlertMessage("Para vendas no crediário, é obrigatório vincular um cliente!");
           return;
         }
 
@@ -531,15 +531,27 @@ Obrigado pela preferência!`;
           </div>
           
           <div className="product-quick-list">
-             {filteredProducts.map(product => (
+             {filteredProducts.map(product => {
+               const maxInst = product.max_installments || 1;
+               let przText = `Prz: R$ ${product.price_credit.toLocaleString('pt-BR', {minimumFractionDigits: 2, maximumFractionDigits: 2})}`;
+               if (product.allow_credit !== false) {
+                 let instValue = product.price_credit / maxInst;
+                 if (product.credit_type === 'interest') {
+                   const interest = product.price_cash * ((product.credit_interest_rate || 0) / 100) * maxInst;
+                   instValue = (product.price_cash + interest) / maxInst;
+                 }
+                 przText = `Prz: ${maxInst}x de R$ ${instValue.toLocaleString('pt-BR', {minimumFractionDigits: 2, maximumFractionDigits: 2})}`;
+               }
+               return (
                <div key={product.id} className="quick-product-card" onClick={() => addToCart(product)}>
                  <span>{product.name}</span>
                  <div className="prices">
-                   <span className="price-cash">Din: R$ {product.price_cash.toLocaleString('pt-BR', {minimumFractionDigits: 2, maximumFractionDigits: 2})}</span>
-                   <span className="price-credit">Prz: R$ {product.price_credit.toLocaleString('pt-BR', {minimumFractionDigits: 2, maximumFractionDigits: 2})}</span>
+                   <span className="price-cash">À Vista: R$ {product.price_cash.toLocaleString('pt-BR', {minimumFractionDigits: 2, maximumFractionDigits: 2})}</span>
+                   <span className="price-credit">{przText}</span>
                  </div>
                </div>
-             ))}
+               );
+             })}
              {searchTerm !== '' && filteredProducts.length === 0 && (
                <div className="empty-state">Produto não encontrado.</div>
              )}
@@ -551,7 +563,7 @@ Obrigado pela preferência!`;
             <div className="payment-method-selector-horizontal" style={{ flexWrap: 'wrap' }}>
               {[
                 { id: 'dinheiro', label: 'À Vista' },
-                { id: 'fiado', label: 'Fiado/Prazo' }
+                { id: 'fiado', label: 'Crediário' }
               ].map(opt => {
                 const isChecked = splitPayments[opt.id] !== undefined;
                 return (
@@ -643,7 +655,7 @@ Obrigado pela preferência!`;
                                 })}
                               </select>
                             ) : (
-                              <span className="text-danger" style={{fontSize: '0.8rem'}}>Não permite fiado</span>
+                              <span className="text-danger" style={{fontSize: '0.8rem'}}>Não permite crediário</span>
                             )}
                           </td>
                         )}
@@ -721,14 +733,6 @@ Obrigado pela preferência!`;
         <div className="receipt-print-only">
           <div className="receipt-header">
             <h2>{settings?.tradeName || 'NOME DA SUA LOJA'}</h2>
-            {settings?.street ? (
-              <p>{settings.street}, {settings.number || 'S/N'} {settings.neighborhood ? `- ${settings.neighborhood}` : ''}</p>
-            ) : (
-              <p>Endereço não informado</p>
-            )}
-            <p>CNPJ: {settings?.cnpj || '00.000.000/0001-00'}</p>
-            <p>WhatsApp: {settings?.phone || 'Não informado'}</p>
-            <p>Data: {lastSaleData.date.toLocaleString('pt-BR')}</p>
           </div>
           <div className="receipt-divider"></div>
           <p>Cliente: {lastSaleData.customer ? lastSaleData.customer.name : 'Consumidor Final'}</p>
@@ -744,7 +748,7 @@ Obrigado pela preferência!`;
             </thead>
             <tbody>
               {lastSaleData.cart.map((item: any, i: number) => {
-                const price = !lastSaleData.isCreditSale ? item.price_cash : item.price_credit;
+                const price = (!lastSaleData.isCreditSale || item.credit_type === 'interest') ? item.price_cash : item.price_credit;
                 const discount = parseFloat(item.discount?.replace(',', '.') || '0');
                 const itemBaseTotal = (price * item.quantity) - discount;
                 let itemTotalInterest = 0;
@@ -772,10 +776,13 @@ Obrigado pela preferência!`;
 
           <div className="receipt-divider"></div>
           <div className="receipt-totals">
-            <p>Método: {lastSaleData.isCreditSale ? 'A Prazo/Cartão' : 'Dinheiro/Pix'}</p>
+            <p>Método: {lastSaleData.isCreditSale ? 'Crediário/Cartão' : 'Dinheiro/Pix'}</p>
             <h3>TOTAL: R$ {lastSaleData.total.toFixed(2)}</h3>
             {lastSaleData.downPayment > 0 && (
-              <p>Entrada (Paga): R$ {lastSaleData.downPayment.toFixed(2)}</p>
+              <>
+                <p>Entrada (Paga): R$ {lastSaleData.downPayment.toFixed(2)}</p>
+                <p style={{ fontWeight: 'bold' }}>Restante (a Prazo): R$ {(lastSaleData.total - lastSaleData.downPayment).toFixed(2)}</p>
+              </>
             )}
           </div>
           
@@ -785,13 +792,24 @@ Obrigado pela preferência!`;
               <p style={{textAlign: 'center', fontWeight: 'bold'}}>Vencimentos / Parcelas</p>
               <table style={{ width: '100%', textAlign: 'left', fontSize: '12px', marginTop: '5px' }}>
                 <tbody>
-                  {lastSaleData.installments.map((inst: any, idx: number) => (
-                    <tr key={idx}>
-                      <td>{idx + 1}ª Parc.</td>
-                      <td>{inst.due_date.toLocaleDateString('pt-BR')}</td>
-                      <td style={{ textAlign: 'right' }}>R$ {inst.amount.toFixed(2)}</td>
-                    </tr>
-                  ))}
+                  {(() => {
+                    const grouped = new Map();
+                    lastSaleData.installments.forEach((inst: any) => {
+                      const dateStr = new Date(inst.due_date).toLocaleDateString('pt-BR');
+                      if (!grouped.has(dateStr)) {
+                        grouped.set(dateStr, { amount: 0, date: dateStr, dateObj: new Date(inst.due_date) });
+                      }
+                      grouped.get(dateStr).amount += inst.amount;
+                    });
+                    const sorted = Array.from(grouped.values()).sort((a, b) => a.dateObj.getTime() - b.dateObj.getTime());
+                    return sorted.map((inst, idx) => (
+                      <tr key={idx}>
+                        <td>{idx + 1}ª Parc.</td>
+                        <td>{inst.date}</td>
+                        <td style={{ textAlign: 'right' }}>R$ {inst.amount.toFixed(2)}</td>
+                      </tr>
+                    ));
+                  })()}
                 </tbody>
               </table>
             </>
@@ -800,6 +818,15 @@ Obrigado pela preferência!`;
           <div className="receipt-footer">
             <p>Obrigado pela preferência!</p>
             <p>Volte sempre.</p>
+            <div className="receipt-divider" style={{ margin: '10px 0' }}></div>
+            {settings?.street ? (
+              <p>{settings.street}, {settings.number || 'S/N'} {settings.neighborhood ? `- ${settings.neighborhood}` : ''}</p>
+            ) : (
+              <p>Endereço não informado</p>
+            )}
+            <p>CNPJ: {settings?.cnpj || '00.000.000/0001-00'}</p>
+            <p>WhatsApp: {settings?.phone || 'Não informado'}</p>
+            <p>Data: {lastSaleData.date.toLocaleString('pt-BR')}</p>
           </div>
         </div>
       )}
@@ -819,7 +846,7 @@ Obrigado pela preferência!`;
                 Esta venda está sendo lançada no crediário para <strong>{selectedCustomer?.name}</strong>.
               </p>
               <div className="form-group">
-                <label>Data de Vencimento da Parcela/Fiado</label>
+                <label>Data de Vencimento da Parcela (Crediário)</label>
                 <input
                   type="date"
                   value={dueDate}
@@ -900,7 +927,7 @@ Obrigado pela preferência!`;
               })()}
               <div style={{ display: 'flex', gap: '1rem', marginTop: '2rem' }}>
                 <button className="btn-secondary" onClick={() => setShowDueDateModal(false)} style={{ flex: 1 }}>Cancelar</button>
-                <button className="btn-primary" onClick={handleFinalizeSale} style={{ flex: 2 }}>Confirmar Fiado</button>
+                <button className="btn-primary" onClick={handleFinalizeSale} style={{ flex: 2 }}>Confirmar Crediário</button>
               </div>
             </div>
           </div>
@@ -1016,7 +1043,7 @@ Obrigado pela preferência!`;
           
           <div style={{ background: 'rgba(255,255,255,0.05)', padding: '1rem', borderRadius: '8px', border: '1px solid var(--border-color)' }}>
             <p style={{ margin: '0 0 0.5rem 0' }}><strong style={{ color: 'var(--text-muted)' }}>Total:</strong> R$ {currentTotal.toLocaleString('pt-BR', {minimumFractionDigits: 2, maximumFractionDigits: 2})}</p>
-            <p style={{ margin: '0 0 0.5rem 0' }}><strong style={{ color: 'var(--text-muted)' }}>Métodos:</strong> {Object.keys(splitPayments).join(', ')}</p>
+            <p style={{ margin: '0 0 0.5rem 0' }}><strong style={{ color: 'var(--text-muted)' }}>Métodos:</strong> {Object.keys(splitPayments).map(k => k === 'fiado' ? 'Crediário' : k === 'dinheiro' ? 'À Vista' : k).join(', ')}</p>
             {selectedCustomer && (
               <p style={{ margin: 0 }}><strong style={{ color: 'var(--text-muted)' }}>Cliente:</strong> {selectedCustomer.name}</p>
             )}

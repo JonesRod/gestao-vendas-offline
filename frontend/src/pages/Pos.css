@@ -373,6 +373,11 @@
   border-radius: 4px;
 }
 
+.installments-select option {
+  background: var(--bg-main, #0f172a);
+  color: var(--text-main, #f8fafc);
+}
+
 .btn-remove-item {
   background: transparent;
   border: none;

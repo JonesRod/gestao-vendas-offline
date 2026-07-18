@@ -712,6 +712,27 @@ export default function Inventory() {
                   <span style={{ fontSize: '0.9rem', color: 'var(--text-muted)' }}>vezes (parcelas)</span>
                 </div>
                 
+                <div style={{ marginTop: '0.4rem', paddingLeft: '0.5rem' }}>
+                  {(() => {
+                    const maxInst = formData.max_installments || 1;
+                    let instValue = (formData.price_credit || 0) / maxInst;
+                    let totalValue = formData.price_credit || 0;
+                    
+                    if (formData.credit_type === 'interest') {
+                      const interest = (formData.price_cash || 0) * ((formData.credit_interest_rate || 0) / 100) * maxInst;
+                      totalValue = (formData.price_cash || 0) + interest;
+                      instValue = totalValue / maxInst;
+                    }
+                    
+                    return (
+                      <span style={{ fontSize: '0.85rem', color: 'var(--primary)', fontWeight: 500 }}>
+                        Prévia: {maxInst}x de R$ {instValue.toLocaleString('pt-BR', {minimumFractionDigits: 2, maximumFractionDigits: 2})} 
+                        {' '}(Total a Prazo: R$ {totalValue.toLocaleString('pt-BR', {minimumFractionDigits: 2, maximumFractionDigits: 2})})
+                      </span>
+                    );
+                  })()}
+                </div>
+                
                 <div style={{ marginTop: '0.8rem', display: 'flex', flexDirection: 'column', gap: '0.8rem', background: 'rgba(255,255,255,0.02)', padding: '1rem', borderRadius: '8px', border: '1px solid rgba(255,255,255,0.05)' }}>
                   <label style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', cursor: 'pointer', color: 'var(--text-main)', fontSize: '0.95rem' }}>
                     <input type="checkbox" checked={formData.punctuality_discount_active === true} onChange={(e) => setFormData({...formData, punctuality_discount_active: e.target.checked})} />
