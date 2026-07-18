@@ -16,6 +16,12 @@ export default function AdminOrders() {
   const [orderToCancel, setOrderToCancel] = useState<number | null>(null);
 
   useEffect(() => {
+    if (highlightParam === 'pending') {
+      setFilter('pending');
+    }
+  }, [highlightParam]);
+
+  useEffect(() => {
     loadSales();
     const interval = setInterval(() => {
       loadSales();

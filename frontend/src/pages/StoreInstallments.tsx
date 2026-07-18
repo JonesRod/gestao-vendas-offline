@@ -13,6 +13,7 @@ export default function StoreInstallments() {
   const [settings, setSettings] = useState<any>(null);
   const [loading, setLoading] = useState(true);
   const [payingInst, setPayingInst] = useState<any | null>(null);
+  const [filter, setFilter] = useState<'all' | 'pending' | 'overdue' | 'paid'>('all');
 
   // Estados do Modal
   const [discountAmount, setDiscountAmount] = useState(0);
@@ -147,35 +148,61 @@ export default function StoreInstallments() {
     return <div className="store-container" style={{ textAlign: 'center', padding: '4rem' }}>Carregando suas faturas...</div>;
   }
 
-  const pending = installments
+  const todayNum = new Date().setHours(0,0,0,0);
+  const isInstOverdue = (inst: any) => {
+    const dueNum = new Date(inst.due_date).setHours(0,0,0,0);
+    return settings?.penalty_active && todayNum > dueNum;
+  };
+
+  const pendingList = installments
     .filter(i => i.status === 'pending')
     .sort((a, b) => new Date(a.due_date).getTime() - new Date(b.due_date).getTime());
     
-  const paid = installments
+  const paidList = installments
     .filter(i => i.status === 'paid')
-    .sort((a, b) => new Date(b.due_date).getTime() - new Date(a.due_date).getTime()); // Pagas ordeno as mais recentes primeiro
+    .sort((a, b) => new Date(b.due_date).getTime() - new Date(a.due_date).getTime());
+
+  const filteredPending = pendingList.filter(i => {
+    if (filter === 'all') return true;
+    if (filter === 'pending') return !isInstOverdue(i);
+    if (filter === 'overdue') return isInstOverdue(i);
+    if (filter === 'paid') return false;
+    return true;
+  });
+
+  const showPendingSection = filter === 'all' || filter === 'pending' || filter === 'overdue';
+  const showPaidSection = filter === 'all' || filter === 'paid';
 
   return (
     <div className="store-container" style={{ paddingBottom: '4rem' }}>
-      <div style={{ display: 'flex', alignItems: 'center', gap: '1rem', marginBottom: '2rem' }}>
+      <div style={{ display: 'flex', alignItems: 'center', gap: '1rem', marginBottom: '1.5rem' }}>
         <Link to="/loja" style={{ background: 'var(--bg-panel)', border: '1px solid var(--border-color)', color: 'var(--text-main)', padding: '0.5rem', borderRadius: '8px', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
           <ArrowLeft size={20} />
         </Link>
         <h2 style={{ margin: 0, color: 'var(--text-main)' }}>Minhas Faturas</h2>
       </div>
 
+      <div className="filter-pills" style={{ margin: 0, display: 'flex', gap: '0.8rem', whiteSpace: 'nowrap', overflowX: 'auto', marginBottom: '2rem' }}>
+        <button className={`pill ${filter === 'all' ? 'active' : ''}`} onClick={() => setFilter('all')}>Todas</button>
+        <button className={`pill ${filter === 'pending' ? 'active' : ''}`} onClick={() => setFilter('pending')}>No Prazo</button>
+        <button className={`pill ${filter === 'overdue' ? 'active' : ''}`} onClick={() => setFilter('overdue')}>Atrasadas</button>
+        <button className={`pill ${filter === 'paid' ? 'active' : ''}`} onClick={() => setFilter('paid')}>Pagas</button>
+      </div>
+
       <div style={{ display: 'grid', gap: '2rem' }}>
         {/* Faturas Pendentes */}
+        {showPendingSection && (
         <section>
           <h3 style={{ color: 'var(--text-main)', borderBottom: '1px solid var(--border-color)', paddingBottom: '0.5rem', marginBottom: '1rem', display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
-            <Clock size={20} color="var(--warning)" /> Pendentes a Pagar
+            <Clock size={20} color={filter === 'overdue' ? 'var(--danger)' : 'var(--warning)'} /> 
+            {filter === 'overdue' ? 'Faturas Atrasadas' : filter === 'pending' ? 'Faturas no Prazo' : 'Pendentes a Pagar'}
           </h3>
           
-          {pending.length === 0 ? (
-            <p style={{ color: 'var(--text-secondary)' }}>Nenhuma fatura em aberto.</p>
+          {filteredPending.length === 0 ? (
+            <p style={{ color: 'var(--text-secondary)' }}>Nenhuma fatura encontrada.</p>
           ) : (
             <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
-              {pending.map(inst => {
+              {filteredPending.map(inst => {
                 const totals = getInstallmentTotals(inst);
                 const isDelayed = totals.calcPenalty > 0 || totals.calcInterest > 0;
                 const isHighlighted = highlightParam === 'overdue' && isDelayed;
@@ -215,16 +242,17 @@ export default function StoreInstallments() {
             </div>
           )}
         </section>
+        )}
 
         {/* Faturas Pagas */}
-        {paid.length > 0 && (
+        {showPaidSection && paidList.length > 0 && (
           <section>
             <h3 style={{ color: 'var(--text-main)', borderBottom: '1px solid var(--border-color)', paddingBottom: '0.5rem', marginBottom: '1rem', display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
               <CheckCircle size={20} color="var(--success)" /> Histórico (Pagas)
             </h3>
             
             <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
-              {paid.map(inst => (
+              {paidList.map(inst => (
                 <div key={inst.id} style={{ background: 'var(--bg-panel)', border: '1px solid var(--border-color)', padding: '1.5rem', borderRadius: '12px', display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '1rem', opacity: 0.8 }}>
                   <div>
                     <h4 style={{ margin: '0 0 0.25rem 0', color: 'var(--text-main)' }}>Pedido #{inst.saleId} - Parcela {inst.number}/{inst.total}</h4>

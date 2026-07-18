@@ -125,30 +125,31 @@ export default function Sidebar() {
 
       <aside className={`sidebar glass-panel ${isMobileMenuOpen ? 'open' : ''} ${isCollapsed ? 'collapsed' : ''}`}>
         <div className="sidebar-header hide-on-mobile">
-          <div className="logo-icon">
-            <Store size={28} color="#f8fafc" />
+          <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+            <div className="logo-icon">
+              <Store size={28} color="#f8fafc" />
+            </div>
+            {!isCollapsed && <h1 className="logo-text">Gestão<span>Pro</span></h1>}
           </div>
-          {!isCollapsed && <h1 className="logo-text">Gestão<span>Pro</span></h1>}
-          <div style={{ display: 'flex', gap: '4px', marginLeft: 'auto' }}>
-            <button className="btn-collapse" onClick={toggleCollapse} title={isCollapsed ? "Expandir" : "Recolher"}>
-              {isCollapsed ? <ChevronRight size={20} /> : <ChevronLeft size={20} />}
-            </button>
-          </div>
+
+          <button className="btn-collapse" onClick={toggleCollapse} title={isCollapsed ? "Expandir" : "Recolher"}>
+            {isCollapsed ? <ChevronRight size={18} /> : <ChevronLeft size={18} />}
+          </button>
         </div>
 
       <nav className="sidebar-nav">
         {role !== 'CUSTOMER' && (
           <button 
             className="nav-item"
-            style={{ background: 'transparent', border: 'none', cursor: 'pointer', outline: 'none', width: '100%', display: 'flex', alignItems: 'center', textAlign: 'left' }}
+            style={{ background: 'transparent', border: 'none', cursor: 'pointer', outline: 'none', width: '100%', textAlign: 'left', padding: '12px 16px' }}
             title={isCollapsed ? "Notificações" : undefined}
             onClick={() => {
               setIsNotifModalOpen(true);
               setIsMobileMenuOpen(false);
             }}
           >
-            <div style={{ position: 'relative', display: 'flex', alignItems: 'center' }}>
-              <Bell size={20} className="nav-icon" />
+            <div style={{ position: 'relative', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+              <Bell size={20} className="nav-icon" style={{ margin: 0 }} />
               {notifications.length > 0 && <span style={{ position: 'absolute', top: -4, right: -4, width: 8, height: 8, background: 'var(--danger)', borderRadius: '50%' }}></span>}
             </div>
             {!isCollapsed && (
@@ -163,6 +164,7 @@ export default function Sidebar() {
             )}
           </button>
         )}
+
         {navItems.map((item) => {
           const Icon = item.icon;
           return (

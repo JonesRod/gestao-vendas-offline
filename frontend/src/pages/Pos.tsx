@@ -31,15 +31,18 @@ export default function Pos() {
   const [pendingInstallments, setPendingInstallments] = useState<any[]>([]);
 
   const [products, setProducts] = useState<Product[]>([]);
+  const [settings, setSettings] = useState<any>(null);
 
   const loadData = async () => {
     try {
-      const [prodRes, custRes] = await Promise.all([
+      const [prodRes, custRes, setRes] = await Promise.all([
         api.get('/products'),
-        api.get('/customers')
+        api.get('/customers'),
+        api.get('/settings')
       ]);
       setProducts(prodRes.data);
       setCustomers(custRes.data);
+      setSettings(setRes.data);
     } catch (error) {
       console.error(error);
     }
@@ -74,28 +77,50 @@ export default function Pos() {
     if (saleData.cart && saleData.cart.length > 0) {
        productsText = saleData.cart.map((i: any) => {
          const price = !saleData.isCreditSale ? i.price_cash : i.price_credit;
-         return `${i.quantity}x ${i.name || 'Produto'} (R$ ${(price * i.quantity).toLocaleString('pt-BR', {minimumFractionDigits:2})})`;
+         const discount = parseFloat(i.discount?.replace(',', '.') || '0');
+         const itemBaseTotal = (price * i.quantity) - discount;
+         let itemTotalInterest = 0;
+         if (saleData.isCreditSale && i.credit_type === 'interest') {
+            itemTotalInterest = itemBaseTotal * ((i.credit_interest_rate || 0) / 100) * (i.selected_installments || 1);
+         }
+         const totalItem = itemBaseTotal + itemTotalInterest;
+         const instCount = i.selected_installments || 1;
+         const instValue = totalItem / instCount;
+
+         const valueText = saleData.isCreditSale 
+           ? `${instCount}x R$ ${instValue.toLocaleString('pt-BR', {minimumFractionDigits: 2, maximumFractionDigits: 2})}`
+           : `R$ ${totalItem.toLocaleString('pt-BR', {minimumFractionDigits: 2, maximumFractionDigits: 2})}`;
+
+         return `${i.quantity}x ${i.name || 'Produto'} (${valueText})`;
        }).join('\n');
     }
 
     let extraInfo = '';
     if (saleData.isCreditSale) {
        if (saleData.downPayment > 0) {
-         extraInfo += `\n*Entrada (Paga):* R$ ${saleData.downPayment.toLocaleString('pt-BR', {minimumFractionDigits: 2})}`;
+         extraInfo += `\n*Entrada (Paga):* R$ ${saleData.downPayment.toLocaleString('pt-BR', {minimumFractionDigits: 2, maximumFractionDigits: 2})}`;
        }
        if (saleData.installments && saleData.installments.length > 0) {
          extraInfo += '\n\n*Vencimentos / Parcelas:*';
          saleData.installments.forEach((inst: any, idx: number) => {
-           extraInfo += `\n${idx + 1}ª Parc: ${new Date(inst.due_date).toLocaleDateString('pt-BR')} - R$ ${inst.amount.toLocaleString('pt-BR', {minimumFractionDigits: 2})}`;
+           extraInfo += `\n${idx + 1}ª Parc: ${new Date(inst.due_date).toLocaleDateString('pt-BR')} - R$ ${inst.amount.toLocaleString('pt-BR', {minimumFractionDigits: 2, maximumFractionDigits: 2})}`;
          });
        }
     }
 
+    const storeName = settings?.tradeName || 'NOME DA SUA LOJA';
+    const storeAddress = settings?.street ? `${settings.street}, ${settings.number || 'S/N'}` : 'Endereço não informado';
+    const storePhone = settings?.phone || 'Não informado';
+
     const text = `🧾 *RECIBO DE VENDA* 🧾
+-----------------------------------
+*${storeName}*
+📍 ${storeAddress}
+📱 WhatsApp: ${storePhone}
 -----------------------------------
 *Cliente:* ${custName}
 *Data:* ${new Date(saleData.date).toLocaleDateString('pt-BR')}
-*Valor Total:* R$ ${saleData.total.toLocaleString('pt-BR', {minimumFractionDigits: 2})}
+*Valor Total:* R$ ${saleData.total.toLocaleString('pt-BR', {minimumFractionDigits: 2, maximumFractionDigits: 2})}
 -----------------------------------
 *Produto(s):*
 ${productsText}
@@ -272,20 +297,24 @@ Obrigado pela preferência!`;
         const baseDay = Number(d);
 
         cart.forEach(item => {
-          const amount = item.price_credit * item.quantity;
-          
+          const price = (!isFiado || item.credit_type === 'interest') ? item.price_cash : item.price_credit;
+          const discount = parseFloat(item.discount?.replace(',', '.') || '0');
+          const itemBaseTotal = (price * item.quantity) - discount;
+          let interest = 0;
+          if (isFiado && item.credit_type === 'interest') {
+             const rate = (item.credit_interest_rate || 0) / 100;
+             const instCount = item.selected_installments || 1;
+             interest = itemBaseTotal * rate * instCount;
+          }
+          const itemTotalAmount = itemBaseTotal + interest;
+
           const parsedDownPayment = parseFloat(downPayment.replace(/\./g, '').replace(',', '.')) || 0;
           const safeDownPayment = Math.min(parsedDownPayment, currentTotal);
-          const itemRatio = currentTotal > 0 ? amount / currentTotal : 0;
+          const itemRatio = currentTotal > 0 ? itemTotalAmount / currentTotal : 0;
           const itemDownPayment = safeDownPayment * itemRatio;
-          const remainingAmount = amount - itemDownPayment;
-
+          
+          const finalAmount = itemTotalAmount - itemDownPayment;
           const installmentsCount = item.selected_installments || 1;
-          let itemInterest = 0;
-          if (item.credit_type === 'interest') {
-            itemInterest = remainingAmount * ((item.credit_interest_rate || 0) / 100) * installmentsCount;
-          }
-          const finalAmount = remainingAmount + itemInterest;
           const installmentValue = finalAmount / installmentsCount;
 
           const itemTotalPunctuality = item.punctuality_discount_active ? (item.punctuality_discount_value || 0) * item.quantity : 0;
@@ -315,7 +344,7 @@ Obrigado pela preferência!`;
         customerId: selectedCustomer?.id,
         totalAmount: currentTotal,
         paymentMethod: finalPaymentMethodStr,
-        status: isFiado ? 'pending' : 'paid',
+        status: 'completed',
         items: cart.map(item => {
           const discount = parseFloat(item.discount?.replace(',', '.') || '0');
           const basePrice = !isFiado ? item.price_cash : item.price_credit;
@@ -323,7 +352,7 @@ Obrigado pela preferência!`;
           return {
             productId: item.id,
             quantity: item.quantity,
-            unitPrice: finalUnitPrice
+            price_applied: finalUnitPrice
           };
         }),
         date: new Date(saleDate).toISOString(),
@@ -506,8 +535,8 @@ Obrigado pela preferência!`;
                <div key={product.id} className="quick-product-card" onClick={() => addToCart(product)}>
                  <span>{product.name}</span>
                  <div className="prices">
-                   <span className="price-cash">Din: R$ {product.price_cash.toLocaleString('pt-BR', {minimumFractionDigits: 2})}</span>
-                   <span className="price-credit">Prz: R$ {product.price_credit.toLocaleString('pt-BR', {minimumFractionDigits: 2})}</span>
+                   <span className="price-cash">Din: R$ {product.price_cash.toLocaleString('pt-BR', {minimumFractionDigits: 2, maximumFractionDigits: 2})}</span>
+                   <span className="price-credit">Prz: R$ {product.price_credit.toLocaleString('pt-BR', {minimumFractionDigits: 2, maximumFractionDigits: 2})}</span>
                  </div>
                </div>
              ))}
@@ -581,7 +610,7 @@ Obrigado pela preferência!`;
                           </div>
                         </td>
                         <td className="product-name-cell">{item.name}</td>
-                        <td>R$ {itemPrice.toLocaleString('pt-BR', {minimumFractionDigits: 2})}</td>
+                        <td>R$ {itemPrice.toLocaleString('pt-BR', {minimumFractionDigits: 2, maximumFractionDigits: 2})}</td>
                         <td>
                           <input 
                             type="text" 
@@ -608,7 +637,7 @@ Obrigado pela preferência!`;
                                   }
                                   return (
                                     <option key={instCount} value={instCount}>
-                                      {instCount}x {item.credit_type === 'interest' ? `(R$ ${instValue.toLocaleString('pt-BR', {minimumFractionDigits: 2})})` : ''}
+                                      {instCount}x {item.credit_type === 'interest' ? `(R$ ${instValue.toLocaleString('pt-BR', {minimumFractionDigits: 2, maximumFractionDigits: 2})})` : ''}
                                     </option>
                                   )
                                 })}
@@ -618,7 +647,7 @@ Obrigado pela preferência!`;
                             )}
                           </td>
                         )}
-                        <td className="font-bold">R$ {totalItem.toLocaleString('pt-BR', {minimumFractionDigits: 2})}</td>
+                        <td className="font-bold">R$ {totalItem.toLocaleString('pt-BR', {minimumFractionDigits: 2, maximumFractionDigits: 2})}</td>
                         <td>
                           <button className="btn-remove-item" onClick={() => setItemToDelete(item.id)}>
                             <Trash2 size={16} />
@@ -649,11 +678,11 @@ Obrigado pela preferência!`;
           <div className="totals-block">
              <div className="total-row">
                <span>Subtotal:</span>
-               <span>R$ {currentTotal.toLocaleString('pt-BR', {minimumFractionDigits: 2})}</span>
+               <span>R$ {currentTotal.toLocaleString('pt-BR', {minimumFractionDigits: 2, maximumFractionDigits: 2})}</span>
              </div>
              <div className="total-row grand-total">
                <span>Total a Pagar:</span>
-               <span className="value">R$ {currentTotal.toLocaleString('pt-BR', {minimumFractionDigits: 2})}</span>
+               <span className="value">R$ {currentTotal.toLocaleString('pt-BR', {minimumFractionDigits: 2, maximumFractionDigits: 2})}</span>
              </div>
           </div>
 
@@ -691,9 +720,14 @@ Obrigado pela preferência!`;
       {lastSaleData && (
         <div className="receipt-print-only">
           <div className="receipt-header">
-            <h2>NOME DA SUA LOJA</h2>
-            <p>Rua Exemplo, 123 - Centro</p>
-            <p>CNPJ: 00.000.000/0001-00</p>
+            <h2>{settings?.tradeName || 'NOME DA SUA LOJA'}</h2>
+            {settings?.street ? (
+              <p>{settings.street}, {settings.number || 'S/N'} {settings.neighborhood ? `- ${settings.neighborhood}` : ''}</p>
+            ) : (
+              <p>Endereço não informado</p>
+            )}
+            <p>CNPJ: {settings?.cnpj || '00.000.000/0001-00'}</p>
+            <p>WhatsApp: {settings?.phone || 'Não informado'}</p>
             <p>Data: {lastSaleData.date.toLocaleString('pt-BR')}</p>
           </div>
           <div className="receipt-divider"></div>
@@ -711,11 +745,25 @@ Obrigado pela preferência!`;
             <tbody>
               {lastSaleData.cart.map((item: any, i: number) => {
                 const price = !lastSaleData.isCreditSale ? item.price_cash : item.price_credit;
+                const discount = parseFloat(item.discount?.replace(',', '.') || '0');
+                const itemBaseTotal = (price * item.quantity) - discount;
+                let itemTotalInterest = 0;
+                if (lastSaleData.isCreditSale && item.credit_type === 'interest') {
+                   itemTotalInterest = itemBaseTotal * ((item.credit_interest_rate || 0) / 100) * (item.selected_installments || 1);
+                }
+                const totalItem = itemBaseTotal + itemTotalInterest;
+                const instCount = item.selected_installments || 1;
+                const instValue = totalItem / instCount;
+                
+                const valueText = lastSaleData.isCreditSale
+                  ? `${instCount}x R$ ${instValue.toLocaleString('pt-BR', {minimumFractionDigits: 2, maximumFractionDigits: 2})}`
+                  : `R$ ${totalItem.toLocaleString('pt-BR', {minimumFractionDigits: 2, maximumFractionDigits: 2})}`;
+
                 return (
                   <tr key={i}>
                     <td>{item.quantity}x</td>
                     <td>{item.name}</td>
-                    <td style={{ textAlign: 'right' }}>R$ {(price * item.quantity).toFixed(2)}</td>
+                    <td style={{ textAlign: 'right' }}>{valueText}</td>
                   </tr>
                 );
               })}
@@ -790,6 +838,66 @@ Obrigado pela preferência!`;
                   style={{ width: '100%', padding: '0.8rem', borderRadius: '8px', background: 'transparent', border: '1px solid var(--border-color)', color: 'var(--text-main)', marginTop: '0.5rem' }}
                 />
               </div>
+
+              {/* Preview das Parcelas */}
+              {(() => {
+                 if (!dueDate) return null;
+                 const [y, m, d] = dueDate.split('-');
+                 if (!y || !m || !d) return null;
+                 const baseYear = Number(y);
+                 const baseMonth = Number(m) - 1;
+                 const baseDay = Number(d);
+
+                 const parsedDownPayment = parseFloat(downPayment.replace(/\./g, '').replace(',', '.')) || 0;
+                 const safeDownPayment = Math.min(parsedDownPayment, currentTotal);
+
+                 const installmentsMap = new Map();
+
+                 const isFiado = true;
+                 cart.forEach(item => {
+                   const price = (!isFiado || item.credit_type === 'interest') ? item.price_cash : item.price_credit;
+                   const discount = parseFloat(item.discount?.replace(',', '.') || '0');
+                   const itemBaseTotal = (price * item.quantity) - discount;
+                   let interest = 0;
+                   if (isFiado && item.credit_type === 'interest') {
+                     const rate = (item.credit_interest_rate || 0) / 100;
+                     const instCount = item.selected_installments || 1;
+                     interest = itemBaseTotal * rate * instCount;
+                   }
+                   const itemTotalAmount = itemBaseTotal + interest;
+
+                   const itemRatio = currentTotal > 0 ? itemTotalAmount / currentTotal : 0;
+                   const itemDownPayment = safeDownPayment * itemRatio;
+                   const finalAmount = itemTotalAmount - itemDownPayment;
+                   
+                   const installmentsCount = item.selected_installments || 1;
+                   const installmentValue = finalAmount / installmentsCount;
+
+                   for (let i = 1; i <= installmentsCount; i++) {
+                     const dateObj = new Date(baseYear, baseMonth + (i - 1), baseDay);
+                     const dateStr = dateObj.toLocaleDateString('pt-BR');
+                     if (!installmentsMap.has(i)) {
+                       installmentsMap.set(i, { number: i, date: dateStr, value: 0 });
+                     }
+                     installmentsMap.get(i).value += installmentValue;
+                   }
+                 });
+                 
+                 const arr = Array.from(installmentsMap.values()).sort((a, b) => a.number - b.number);
+                 if (arr.length === 0) return null;
+
+                 return (
+                   <div style={{ marginTop: '1rem', background: 'rgba(0,0,0,0.1)', padding: '1rem', borderRadius: '8px' }}>
+                     <h4 style={{ marginBottom: '0.5rem', color: 'var(--text-main)', fontSize: '0.95rem' }}>Prévia das Parcelas</h4>
+                     {arr.map(inst => (
+                       <div key={inst.number} style={{ display: 'flex', justifyContent: 'space-between', padding: '0.3rem 0', borderBottom: '1px dashed var(--border-color)' }}>
+                         <span style={{ color: 'var(--text-muted)' }}>{inst.number}x - {inst.date}</span>
+                         <strong style={{ color: 'var(--text-main)' }}>R$ {inst.value.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</strong>
+                       </div>
+                     ))}
+                   </div>
+                 );
+              })()}
               <div style={{ display: 'flex', gap: '1rem', marginTop: '2rem' }}>
                 <button className="btn-secondary" onClick={() => setShowDueDateModal(false)} style={{ flex: 1 }}>Cancelar</button>
                 <button className="btn-primary" onClick={handleFinalizeSale} style={{ flex: 2 }}>Confirmar Fiado</button>
@@ -907,7 +1015,7 @@ Obrigado pela preferência!`;
           <p style={{ fontSize: '1.1rem', color: 'var(--text-main)' }}>Tem certeza que deseja finalizar esta venda?</p>
           
           <div style={{ background: 'rgba(255,255,255,0.05)', padding: '1rem', borderRadius: '8px', border: '1px solid var(--border-color)' }}>
-            <p style={{ margin: '0 0 0.5rem 0' }}><strong style={{ color: 'var(--text-muted)' }}>Total:</strong> R$ {currentTotal.toLocaleString('pt-BR', {minimumFractionDigits: 2})}</p>
+            <p style={{ margin: '0 0 0.5rem 0' }}><strong style={{ color: 'var(--text-muted)' }}>Total:</strong> R$ {currentTotal.toLocaleString('pt-BR', {minimumFractionDigits: 2, maximumFractionDigits: 2})}</p>
             <p style={{ margin: '0 0 0.5rem 0' }}><strong style={{ color: 'var(--text-muted)' }}>Métodos:</strong> {Object.keys(splitPayments).join(', ')}</p>
             {selectedCustomer && (
               <p style={{ margin: 0 }}><strong style={{ color: 'var(--text-muted)' }}>Cliente:</strong> {selectedCustomer.name}</p>
