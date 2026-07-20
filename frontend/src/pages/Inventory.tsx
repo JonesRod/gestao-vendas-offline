@@ -392,8 +392,8 @@ export default function Inventory() {
                     <div style={{ display: 'flex', gap: '0.5rem', alignItems: 'center' }}>
                       <div className="type-badge">{product.type === 'kit' ? 'Cesta / Kit' : 'Produto Avulso'}</div>
                       {product.is_promotional && (
-                        <div className="type-badge" style={{ background: 'var(--primary)', color: 'white', borderColor: 'var(--primary)' }}>
-                          Promoção
+                        <div className="type-badge" style={{ background: 'var(--warning)', color: '#000', borderColor: 'var(--warning)' }}>
+                          PROMOÇÃO
                         </div>
                       )}
                     </div>
@@ -652,7 +652,15 @@ export default function Inventory() {
                       </div>
                       <div className="form-group">
                         <label style={{ color: 'var(--text-main)' }}>Data Final</label>
-                        <input type="date" required value={formData.promo_end_date ? new Date(formData.promo_end_date).toISOString().split('T')[0] : ''} onChange={e => setFormData({...formData, promo_end_date: e.target.value ? new Date(e.target.value).toISOString() : ''})} style={{ borderColor: 'var(--primary)' }} />
+                        <input type="date" required value={formData.promo_end_date ? new Date(formData.promo_end_date).toISOString().split('T')[0] : ''} onChange={e => {
+                          if (e.target.value) {
+                             const [year, month, day] = e.target.value.split('-');
+                             const d = new Date(Number(year), Number(month) - 1, Number(day), 23, 59, 59, 999);
+                             setFormData({...formData, promo_end_date: d.toISOString()});
+                          } else {
+                             setFormData({...formData, promo_end_date: ''});
+                          }
+                        }} style={{ borderColor: 'var(--primary)' }} />
                       </div>
                     </div>
                   </>

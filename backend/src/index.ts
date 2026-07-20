@@ -70,6 +70,28 @@ app.delete('/api/categories/:id', async (req, res) => {
 
 // Routes for Products
 app.get('/api/products', async (req, res) => {
+  const now = new Date();
+  
+  try {
+    await prisma.product.updateMany({
+      where: {
+        is_promotional: true,
+        promo_end_date: {
+          lt: now
+        }
+      },
+      data: {
+        is_promotional: false,
+        promo_price_cash: null,
+        promo_price_credit: null,
+        promo_start_date: null,
+        promo_end_date: null
+      }
+    });
+  } catch (error) {
+    console.error('Error auto-removing expired promotions:', error);
+  }
+
   const products = await prisma.product.findMany({ include: { kitItemsParent: true, category: true } });
   res.json(products.map(p => ({
     ...p,
