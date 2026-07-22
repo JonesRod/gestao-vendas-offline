@@ -11,19 +11,59 @@ interface AuthContextType {
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
 
+// Verifica se o token JWT ainda é válido (não expirou)
+function isTokenValid(token: string | null): boolean {
+  if (!token) return false;
+  try {
+    const payload = JSON.parse(atob(token.split('.')[1]));
+    // exp é em segundos, Date.now() em ms
+    return payload.exp * 1000 > Date.now();
+  } catch {
+    return false;
+  }
+}
+
+function clearAuthStorage() {
+  localStorage.removeItem('@GestaoOffline:token');
+  localStorage.removeItem('@GestaoOffline:role');
+  localStorage.removeItem('@GestaoOffline:user');
+}
+
 export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [isAuthenticated, setIsAuthenticated] = useState<boolean>(() => {
-    return !!localStorage.getItem('@GestaoOffline:token');
+    const token = localStorage.getItem('@GestaoOffline:token');
+    if (!isTokenValid(token)) {
+      clearAuthStorage();
+      return false;
+    }
+    return true;
   });
   
   const [role, setRole] = useState<string | null>(() => {
+    const token = localStorage.getItem('@GestaoOffline:token');
+    if (!isTokenValid(token)) return null;
     return localStorage.getItem('@GestaoOffline:role');
   });
 
   const [user, setUser] = useState<any | null>(() => {
+    const token = localStorage.getItem('@GestaoOffline:token');
+    if (!isTokenValid(token)) return null;
     const u = localStorage.getItem('@GestaoOffline:user');
     return u ? JSON.parse(u) : null;
   });
+
+  // Sincroniza logout entre abas diferentes do navegador
+  useEffect(() => {
+    const handleStorageChange = (e: StorageEvent) => {
+      if (e.key === '@GestaoOffline:token' && !e.newValue) {
+        setIsAuthenticated(false);
+        setRole(null);
+        setUser(null);
+      }
+    };
+    window.addEventListener('storage', handleStorageChange);
+    return () => window.removeEventListener('storage', handleStorageChange);
+  }, []);
 
   const login = async (cpf: string, password: string, role?: string) => {
     try {
@@ -57,9 +97,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     setIsAuthenticated(false);
     setRole(null);
     setUser(null);
-    localStorage.removeItem('@GestaoOffline:token');
-    localStorage.removeItem('@GestaoOffline:role');
-    localStorage.removeItem('@GestaoOffline:user');
+    clearAuthStorage();
   };
 
   return (

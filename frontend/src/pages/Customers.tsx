@@ -262,7 +262,9 @@ Obrigado pela preferência!`;
                   {customer.is_loyal && (
                     <div className="badge success" style={{textTransform: 'uppercase', background: 'rgba(59, 130, 246, 0.2)', color: '#3b82f6', border: '1px solid rgba(59, 130, 246, 0.4)'}}>★ Fiel</div>
                   )}
-                  {customer.status === 'serasa' || (customer.is_blocked && customer.status !== 'espera') ? (
+                  {customer.status === 'sem_crediario' ? (
+                    <div className="badge" style={{textTransform: 'uppercase', background: 'rgba(100, 116, 139, 0.2)', color: '#94a3b8', border: '1px solid rgba(100, 116, 139, 0.4)'}}><UserX size={16} /> Sem Crediário</div>
+                  ) : customer.status === 'serasa' ? (
                     <div className="badge danger" style={{textTransform: 'uppercase'}}><UserX size={16} /> Serasa</div>
                   ) : customer.status === 'espera' ? (
                     <div className="badge warning" style={{textTransform: 'uppercase'}}><UserX size={16} /> Espera</div>
@@ -272,30 +274,36 @@ Obrigado pela preferência!`;
                 </div>
               </div>
 
-              <div className="credit-section">
-                <div className="credit-header">
-                  <span className="credit-label"><DollarSign size={16} /> Limite de Crédito (Fiado)</span>
-                  <span className="credit-amount">R$ {customer.credit_limit.toLocaleString('pt-BR', {minimumFractionDigits: 2, maximumFractionDigits: 2})}</span>
+              {customer.status !== 'sem_crediario' ? (
+                <div className="credit-section">
+                  <div className="credit-header">
+                    <span className="credit-label"><DollarSign size={16} /> Limite de Crédito (Fiado)</span>
+                    <span className="credit-amount">R$ {customer.credit_limit.toLocaleString('pt-BR', {minimumFractionDigits: 2, maximumFractionDigits: 2})}</span>
+                  </div>
+                  
+                  {customer.credit_limit > 0 ? (
+                    <>
+                      <div className="progress-bar-container">
+                        <div 
+                          className={`progress-bar ${usagePercent > 85 ? 'danger' : usagePercent > 60 ? 'warning' : 'success'}`}
+                          style={{ width: `${Math.min(usagePercent, 100)}%` }}
+                        ></div>
+                      </div>
+                      
+                      <div className="credit-footer">
+                        <span className="used">Usado: R$ {customer.credit_used.toLocaleString('pt-BR', {minimumFractionDigits: 2, maximumFractionDigits: 2})}</span>
+                        <span className="available">Livre: R$ {availableCredit.toLocaleString('pt-BR', {minimumFractionDigits: 2, maximumFractionDigits: 2})}</span>
+                      </div>
+                    </>
+                  ) : (
+                    <p className="no-credit">Cliente compra apenas à vista / Dinheiro</p>
+                  )}
                 </div>
-                
-                {customer.credit_limit > 0 ? (
-                  <>
-                    <div className="progress-bar-container">
-                      <div 
-                        className={`progress-bar ${usagePercent > 85 ? 'danger' : usagePercent > 60 ? 'warning' : 'success'}`}
-                        style={{ width: `${Math.min(usagePercent, 100)}%` }}
-                      ></div>
-                    </div>
-                    
-                    <div className="credit-footer">
-                      <span className="used">Usado: R$ {customer.credit_used.toLocaleString('pt-BR', {minimumFractionDigits: 2, maximumFractionDigits: 2})}</span>
-                      <span className="available">Livre: R$ {availableCredit.toLocaleString('pt-BR', {minimumFractionDigits: 2, maximumFractionDigits: 2})}</span>
-                    </div>
-                  </>
-                ) : (
-                  <p className="no-credit">Cliente compra apenas à vista / Dinheiro</p>
-                )}
-              </div>
+              ) : (
+                <div className="credit-section" style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', padding: '1rem', background: 'rgba(255,255,255,0.02)' }}>
+                  <p style={{ color: 'var(--text-muted)', fontSize: '0.9rem', fontStyle: 'italic' }}>Sem crediário aprovado</p>
+                </div>
+              )}
 
               <div className="card-actions">
                 <div style={{display: 'flex', gap: '1rem'}}>
@@ -386,9 +394,7 @@ Obrigado pela preferência!`;
             <input type="text" placeholder="Ex: Ao lado da padaria" value={formData.address?.observation} onChange={e => setFormData({...formData, address: {...formData.address!, observation: e.target.value}})} />
           </div>
 
-          <h3 style={{fontSize: '1rem', margin: '1.5rem 0 1rem', color: 'var(--primary)'}}>Limites e Crédito</h3>
-          
-          <div className="form-group" style={{ marginBottom: '1.5rem' }}>
+          <div className="form-group" style={{ marginTop: '1.5rem', borderTop: '1px solid var(--border-color)', paddingTop: '1.5rem', marginBottom: '0.5rem' }}>
             <label style={{ display: 'block', color: 'var(--text-muted)', fontSize: '0.875rem', marginBottom: '0.5rem' }}>
               Status de Fidelidade
             </label>
@@ -407,42 +413,65 @@ Obrigado pela preferência!`;
               </span>
             </div>
           </div>
-          
-          <div className="form-row">
-            <div className="form-group">
-              <label>Limite de Cadastro (R$)</label>
-              <input type="text" value={maskCurrency(formData.credit_limit || 0)} onChange={e => setFormData({...formData, credit_limit: parseCurrency(e.target.value)})} />
-            </div>
-            <div className="form-group">
-              <label>Vencimento Padrão (Dia)</label>
-              <input type="number" min="0" max="31" value={formData.due_date} onChange={e => setFormData({...formData, due_date: Number(e.target.value)})} />
-            </div>
-          </div>
 
-          <div className="form-group" style={{marginTop: '1.5rem', borderTop: '1px solid var(--border-color)', paddingTop: '1.5rem', marginBottom: '1.5rem'}}>
-            <label style={{marginBottom: '0.8rem'}}>Status do Cliente (Em relação a Crédito)</label>
-            <div style={{ display: 'flex', gap: '1.5rem' }}>
-              <label style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', cursor: 'pointer', color: 'var(--text-main)', fontSize: '0.95rem' }}>
-                <input type="radio" name="customer_status" checked={formData.status === 'ativo' || (!formData.status && !formData.is_blocked)} onChange={() => setFormData({...formData, status: 'ativo', is_blocked: false})} />
-                Ativo
+          <h3 style={{fontSize: '1rem', margin: '1.5rem 0 1rem', color: 'var(--primary)'}}>Limites e Crédito</h3>
+
+          <div className="form-group" style={{ marginBottom: '1.5rem' }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '1rem', marginBottom: '1rem' }}>
+              <label className="toggle-switch">
+                <input type="checkbox" checked={!formData.is_blocked} onChange={(e) => setFormData({...formData, is_blocked: !e.target.checked, status: e.target.checked ? 'ativo' : 'espera'})} />
+                <span className="slider"></span>
               </label>
-              <label style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', cursor: 'pointer', color: 'var(--text-main)', fontSize: '0.95rem' }}>
-                <input type="radio" name="customer_status" checked={formData.status === 'espera'} onChange={() => setFormData({...formData, status: 'espera', is_blocked: true})} />
+              <span style={{ color: 'var(--text-main)', fontWeight: 500 }}>Permitir Vendas no Crediário</span>
+            </div>
+            
+            <label style={{marginBottom: '0.8rem', color: 'var(--text-muted)', fontSize: '0.9rem'}}>Classificação de Status (Detalhe)</label>
+            <div style={{ display: 'flex', gap: '1.5rem', flexWrap: 'wrap' }}>
+              <label style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', cursor: 'pointer', color: 'var(--text-main)', fontSize: '0.9rem', opacity: !formData.is_blocked ? 0.5 : 1 }}>
+                <input type="radio" name="customer_status" checked={formData.is_blocked && formData.status === 'sem_crediario'} onChange={() => setFormData({...formData, status: 'sem_crediario', is_blocked: true})} />
+                Sem Crediário
+              </label>
+              <label style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', cursor: 'pointer', color: 'var(--text-main)', fontSize: '0.9rem', opacity: formData.is_blocked ? 0.5 : 1 }}>
+                <input type="radio" name="customer_status" checked={!formData.is_blocked} onChange={() => setFormData({...formData, status: 'ativo', is_blocked: false})} />
+                Crediário Ativo
+              </label>
+              <label style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', cursor: 'pointer', color: 'var(--text-main)', fontSize: '0.9rem', opacity: !formData.is_blocked ? 0.5 : 1 }}>
+                <input type="radio" name="customer_status" checked={formData.is_blocked && formData.status === 'espera'} onChange={() => setFormData({...formData, status: 'espera', is_blocked: true})} />
                 Em Espera (Bloq.)
               </label>
-              <label style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', cursor: 'pointer', color: 'var(--text-main)', fontSize: '0.95rem' }}>
-                <input type="radio" name="customer_status" checked={formData.status === 'serasa' || (formData.status !== 'espera' && formData.is_blocked)} onChange={() => setFormData({...formData, status: 'serasa', is_blocked: true})} />
+              <label style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', cursor: 'pointer', color: 'var(--text-main)', fontSize: '0.9rem', opacity: !formData.is_blocked ? 0.5 : 1 }}>
+                <input type="radio" name="customer_status" checked={formData.is_blocked && formData.status === 'serasa'} onChange={() => setFormData({...formData, status: 'serasa', is_blocked: true})} />
                 Serasa (Bloq.)
               </label>
             </div>
+            {formData.is_blocked && formData.status === 'sem_crediario' && (
+              <p style={{ fontSize: '0.8rem', color: 'var(--text-muted)', marginTop: '0.75rem', display: 'flex', alignItems: 'center', gap: '0.25rem' }}>
+                <i className="fa-solid fa-info-circle"></i> O cliente ainda não tem crediário aprovado, mas poderá solicitar futuramente.
+              </p>
+            )}
           </div>
           
-          {formData.id && (
-            <div className="form-group" style={{background: 'rgba(239, 68, 68, 0.1)', padding: '1rem', borderRadius: '8px', border: '1px solid rgba(239, 68, 68, 0.3)'}}>
-              <label style={{color: 'var(--danger)'}}>Correção Manual: Crédito Utilizado (Dívida)</label>
-              <p style={{fontSize: '0.8rem', color: 'var(--text-muted)', marginBottom: '0.5rem'}}>Altere apenas se houver erro no saldo do cliente.</p>
-              <input type="text" value={maskCurrency(formData.credit_used || 0)} onChange={e => setFormData({...formData, credit_used: parseCurrency(e.target.value)})} />
-            </div>
+          {formData.status !== 'sem_crediario' && (
+            <>
+              <div className="form-row">
+                <div className="form-group">
+                  <label>Limite de Cadastro (R$)</label>
+                  <input type="text" value={maskCurrency(formData.credit_limit || 0)} onChange={e => setFormData({...formData, credit_limit: parseCurrency(e.target.value)})} />
+                </div>
+                <div className="form-group">
+                  <label>Vencimento Padrão (Dia)</label>
+                  <input type="number" min="0" max="31" value={formData.due_date} onChange={e => setFormData({...formData, due_date: Number(e.target.value)})} />
+                </div>
+              </div>
+              
+              {formData.id && (
+                <div className="form-group" style={{background: 'rgba(239, 68, 68, 0.1)', padding: '1rem', borderRadius: '8px', border: '1px solid rgba(239, 68, 68, 0.3)'}}>
+                  <label style={{color: 'var(--danger)'}}>Correção Manual: Crédito Utilizado (Dívida)</label>
+                  <p style={{fontSize: '0.8rem', color: 'var(--text-muted)', marginBottom: '0.5rem'}}>Altere apenas se houver erro no saldo do cliente.</p>
+                  <input type="text" value={maskCurrency(formData.credit_used || 0)} onChange={e => setFormData({...formData, credit_used: parseCurrency(e.target.value)})} />
+                </div>
+              )}
+            </>
           )}
 
           <div className="form-actions">

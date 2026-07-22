@@ -214,7 +214,7 @@ app.put('/api/sales/:id/status', async (req, res) => {
         }
 
         // Devolver limite de crédito
-        if (sale.customerId && sale.paymentMethod.includes('credit')) {
+        if (sale.customerId && (sale.paymentMethod.includes('credit') || sale.paymentMethod.includes('fiado'))) {
           const customer = await tx.customer.findUnique({ where: { id: sale.customerId }});
           if (customer) {
             const sumInstallments = sale.installments.reduce((acc, inst) => acc + inst.amount, 0);
@@ -276,7 +276,7 @@ app.post('/api/sales', async (req, res) => {
         });
       }
 
-      if (saleData.customerId && saleData.paymentMethod.includes('credit')) {
+      if (saleData.customerId && (saleData.paymentMethod.includes('credit') || saleData.paymentMethod.includes('fiado'))) {
          const customer = await tx.customer.findUnique({ where: { id: saleData.customerId }});
          if (customer) {
             const sumInstallments = installments && installments.length > 0 

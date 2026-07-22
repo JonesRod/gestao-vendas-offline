@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { api } from '../services/api';
 import { useAuth } from '../contexts/AuthContext';
-import { User, Mail, Phone, MapPin, Calendar, CreditCard } from 'lucide-react';
+import { User, MapPin, CreditCard } from 'lucide-react';
 import './StoreProfile.css';
 
 export default function StoreProfile() {
@@ -147,35 +147,46 @@ export default function StoreProfile() {
           </h3>
           
           <div className="form-grid">
-            <div style={{ background: 'var(--bg-main)', padding: '1rem', borderRadius: '8px' }}>
-              <span style={{ display: 'block', fontSize: '0.85rem', color: 'var(--text-muted)', marginBottom: '0.3rem' }}>Status do Crediário</span>
-              <strong className={creditInfo.is_blocked ? 'text-danger' : 'text-success'} style={{ fontSize: '1.1rem' }}>
-                {creditInfo.is_blocked ? 'BLOQUEADO' : (creditInfo.limit > 0 ? 'ATIVO' : 'INATIVO')}
-              </strong>
-            </div>
-            
-            {creditInfo.limit > 0 ? (
-              <>
-                <div style={{ background: 'var(--bg-main)', padding: '1rem', borderRadius: '8px' }}>
-                  <span style={{ display: 'block', fontSize: '0.85rem', color: 'var(--text-muted)', marginBottom: '0.3rem' }}>Limite Total</span>
-                  <strong style={{ fontSize: '1.1rem', color: 'var(--text-primary)' }}>
-                    R$ {creditInfo.limit.toLocaleString('pt-BR', {minimumFractionDigits: 2})}
-                  </strong>
-                </div>
-                <div style={{ background: 'var(--bg-main)', padding: '1rem', borderRadius: '8px' }}>
-                  <span style={{ display: 'block', fontSize: '0.85rem', color: 'var(--text-muted)', marginBottom: '0.3rem' }}>Crédito Disponível</span>
-                  <strong className={(creditInfo.limit - creditInfo.used) <= 0 ? 'text-danger' : 'text-success'} style={{ fontSize: '1.1rem' }}>
-                    R$ {(creditInfo.limit - creditInfo.used).toLocaleString('pt-BR', {minimumFractionDigits: 2})}
-                  </strong>
-                </div>
-              </>
-            ) : (
-              <div style={{ background: 'var(--bg-main)', padding: '1rem', borderRadius: '8px', gridColumn: 'span 2' }}>
+            {creditInfo.status === 'sem_crediario' ? (
+              <div style={{ background: 'var(--bg-main)', padding: '1rem', borderRadius: '8px', gridColumn: 'span 3' }}>
                 <span style={{ display: 'block', fontSize: '0.85rem', color: 'var(--text-muted)', marginBottom: '0.3rem' }}>Aviso</span>
                 <span style={{ fontSize: '0.95rem', color: 'var(--text-secondary)' }}>
                   Você ainda não possui limite de crédito aprovado para compras a prazo.
                 </span>
               </div>
+            ) : (
+              <>
+                <div style={{ background: 'var(--bg-main)', padding: '1rem', borderRadius: '8px' }}>
+                  <span style={{ display: 'block', fontSize: '0.85rem', color: 'var(--text-muted)', marginBottom: '0.3rem' }}>Status do Crediário</span>
+                  <strong className={creditInfo.is_blocked ? 'text-danger' : 'text-success'} style={{ fontSize: '1.1rem' }}>
+                    {creditInfo.is_blocked ? 'BLOQUEADO' : (creditInfo.limit > 0 ? 'ATIVO' : 'INATIVO')}
+                  </strong>
+                </div>
+                
+                {creditInfo.limit > 0 ? (
+                  <>
+                    <div style={{ background: 'var(--bg-main)', padding: '1rem', borderRadius: '8px' }}>
+                      <span style={{ display: 'block', fontSize: '0.85rem', color: 'var(--text-muted)', marginBottom: '0.3rem' }}>Limite Total</span>
+                      <strong style={{ fontSize: '1.1rem', color: 'var(--text-primary)' }}>
+                        R$ {creditInfo.limit.toLocaleString('pt-BR', {minimumFractionDigits: 2})}
+                      </strong>
+                    </div>
+                    <div style={{ background: 'var(--bg-main)', padding: '1rem', borderRadius: '8px' }}>
+                      <span style={{ display: 'block', fontSize: '0.85rem', color: 'var(--text-muted)', marginBottom: '0.3rem' }}>Crédito Disponível</span>
+                      <strong className={(creditInfo.limit - creditInfo.used) <= 0 ? 'text-danger' : 'text-success'} style={{ fontSize: '1.1rem' }}>
+                        R$ {(creditInfo.limit - creditInfo.used).toLocaleString('pt-BR', {minimumFractionDigits: 2})}
+                      </strong>
+                    </div>
+                  </>
+                ) : (
+                  <div style={{ background: 'var(--bg-main)', padding: '1rem', borderRadius: '8px', gridColumn: 'span 2' }}>
+                    <span style={{ display: 'block', fontSize: '0.85rem', color: 'var(--text-muted)', marginBottom: '0.3rem' }}>Aviso</span>
+                    <span style={{ fontSize: '0.95rem', color: 'var(--text-secondary)' }}>
+                      Você ainda não possui limite de crédito aprovado para compras a prazo.
+                    </span>
+                  </div>
+                )}
+              </>
             )}
           </div>
         </div>

@@ -25,7 +25,7 @@ export interface Customer {
   is_blocked: boolean;
   is_loyal?: boolean;
   due_date: number;
-  status?: 'ativo' | 'espera' | 'serasa';
+  status?: 'ativo' | 'espera' | 'serasa' | 'sem_crediario';
   address?: Address;
   cep?: string;
   street?: string;

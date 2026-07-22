@@ -234,7 +234,7 @@
 
 .pos-bottom-section {
   display: grid;
-  grid-template-columns: 1fr 2fr;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 2fr);
   gap: 1.5rem;
   padding: 1.5rem;
   border-radius: 12px;
@@ -274,10 +274,23 @@
   gap: 0.5rem;
   overflow-y: auto;
   flex: 1;
+  max-height: 320px;
 }
 
+.product-quick-list::-webkit-scrollbar {
+  width: 4px;
+}
+.product-quick-list::-webkit-scrollbar-thumb {
+  background: rgba(255,255,255,0.15);
+  border-radius: 4px;
+}
+.product-quick-list::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+
 .quick-product-card {
-  padding: 1rem;
+  padding: 0.75rem 1rem;
   background: rgba(255,255,255,0.03);
   border-radius: 8px;
   cursor: pointer;
@@ -285,15 +298,22 @@
   display: flex;
   justify-content: space-between;
   align-items: center;
+  gap: 0.5rem;
+  overflow: hidden;
 }
 
 .quick-product-card:hover {
   background: rgba(99, 102, 241, 0.15);
 }
 
-.quick-product-card span {
+.quick-product-card > span {
   font-weight: 500;
   font-size: 0.95rem;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  flex: 1;
 }
 
 .quick-product-card .prices {
@@ -301,6 +321,8 @@
   flex-direction: column;
   align-items: flex-end;
   font-size: 0.8rem;
+  flex-shrink: 0;
+  white-space: nowrap;
 }
 
 .price-cash { color: var(--success); }
@@ -308,12 +330,28 @@
 
 .cart-area {
   display: flex;
-  gap: 1.5rem;
+  flex-direction: column;
+  gap: 0;
+  min-width: 0;
 }
 
 .cart-table-container {
-  flex: 2;
+  flex: 1;
   overflow-y: auto;
+  overflow-x: auto;
+  max-width: 100%;
+  max-height: 280px;
+}
+
+.cart-table-container::-webkit-scrollbar {
+  width: 4px;
+}
+.cart-table-container::-webkit-scrollbar-thumb {
+  background: rgba(255,255,255,0.15);
+  border-radius: 4px;
+}
+.cart-table-container::-webkit-scrollbar-track {
+  background: transparent;
 }
 
 .cart-table {
@@ -532,7 +570,7 @@
   gap: 0.8rem;
 }
 
-@media (max-width: 900px) {
+@media (max-width: 768px) {
   .customer-details {
     flex-wrap: wrap;
     gap: 1rem;
@@ -568,5 +606,23 @@
   
   .payment-method-selector-horizontal {
     flex-direction: column;
+  }
+
+  .cart-area {
+    flex-direction: column;
+    min-width: 0;
+  }
+
+  .cart-table th, .cart-table td {
+    padding: 0.5rem 0.25rem;
+    font-size: 0.8rem;
+  }
+
+  .cart-table-container {
+    overflow-x: auto;
+  }
+
+  .checkout-sidebar {
+    width: 100%;
   }
 }

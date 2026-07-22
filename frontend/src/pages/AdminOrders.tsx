@@ -190,21 +190,35 @@ export default function AdminOrders() {
                           {/* Itens do Pedido */}
                           <div>
                             <h4 style={{ color: 'var(--text-main)', marginBottom: '1rem', display: 'flex', alignItems: 'center', gap: '0.5rem' }}><Package size={18} /> Itens do Pedido</h4>
-                            <div style={{ background: 'var(--bg-panel)', padding: '1rem', borderRadius: '8px', display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
-                              {sale.items.map((item: any) => (
-                                <div key={item.id} style={{ display: 'flex', justifyContent: 'space-between', borderBottom: '1px solid var(--border-color)', paddingBottom: '0.5rem', marginBottom: '0.5rem' }}>
-                                  <div style={{ display: 'flex', flexDirection: 'column' }}>
-                                    <span>{item.product.name}</span>
-                                    <span style={{ fontSize: '0.8rem', color: 'var(--text-secondary)' }}>
-                                      {item.quantity}x {!sale.paymentMethod?.includes('credit') && `de R$ ${item.price_applied.toLocaleString('pt-BR', {minimumFractionDigits:2, maximumFractionDigits:2})}`}
-                                    </span>
+                            <div style={{ background: 'var(--bg-panel)', padding: '1rem', borderRadius: '8px', display: 'flex', flexDirection: 'column', gap: '0.75rem' }}>
+                              {sale.items.map((item: any) => {
+                                const isCreditSale = sale.paymentMethod?.includes('credit') || sale.paymentMethod === 'fiado';
+                                const totalItem = item.quantity * item.price_applied;
+                                return (
+                                  <div key={item.id} style={{ borderBottom: '1px solid var(--border-color)', paddingBottom: '0.75rem' }}>
+                                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
+                                      <span style={{ fontWeight: 500 }}>
+                                        {item.quantity > 1 ? `${item.quantity}x ` : ''}{item.product.name}
+                                      </span>
+                                      <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: '0.15rem' }}>
+                                        {!isCreditSale && (
+                                          <span style={{ fontWeight: 'bold', whiteSpace: 'nowrap' }}>
+                                            R$ {totalItem.toLocaleString('pt-BR', {minimumFractionDigits:2, maximumFractionDigits:2})}
+                                          </span>
+                                        )}
+                                        {isCreditSale && item.product?.price_cash != null && (
+                                          <span style={{ fontWeight: '500', color: 'var(--success)', textDecoration: 'none' }}>
+                                            À vista: R$ {item.product.price_cash.toLocaleString('pt-BR', {minimumFractionDigits:2, maximumFractionDigits:2})}
+                                          </span>
+                                        )}
+                                      </div>
+                                    </div>
                                   </div>
-                                  {!sale.paymentMethod?.includes('credit') && (
-                                    <span style={{ fontWeight: 'bold' }}>R$ {(item.quantity * item.price_applied).toLocaleString('pt-BR', {minimumFractionDigits:2, maximumFractionDigits:2})}</span>
-                                  )}
-                                </div>
-                              ))}
+                                );
+                              })}
                             </div>
+
+
                           </div>
 
                           {/* Parcelas do Pedido */}

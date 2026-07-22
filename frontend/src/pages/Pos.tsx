@@ -69,7 +69,7 @@ export default function Pos() {
     setCustomerSearch('');
   };
 
-  const shareSaleReceipt = async (saleData: any) => {
+  const shareSaleReceipt = async (saleData: any, waWindow: Window | null = null) => {
     if (!saleData) return;
     const custName = saleData.customer?.name || 'Consumidor Final';
     
@@ -148,10 +148,19 @@ Obrigado pela preferência!`;
     }
 
     if (navigator.share) {
-      try { await navigator.share({ title: 'Recibo de Venda', text }); } 
-      catch (e) { if ((e as any).name !== 'AbortError') window.open(`https://wa.me/${phoneStr}?text=${encodeURIComponent(text)}`, '_blank'); }
+      try { 
+        await navigator.share({ title: 'Recibo de Venda', text }); 
+        if (waWindow) waWindow.close();
+      } 
+      catch (e) { 
+        if ((e as any).name !== 'AbortError') {
+          if (waWindow) waWindow.location.href = `https://wa.me/${phoneStr}?text=${encodeURIComponent(text)}`;
+          else window.open(`https://wa.me/${phoneStr}?text=${encodeURIComponent(text)}`, '_blank');
+        } else if (waWindow) waWindow.close();
+      }
     } else {
-      window.open(`https://wa.me/${phoneStr}?text=${encodeURIComponent(text)}`, '_blank');
+      if (waWindow) waWindow.location.href = `https://wa.me/${phoneStr}?text=${encodeURIComponent(text)}`;
+      else window.open(`https://wa.me/${phoneStr}?text=${encodeURIComponent(text)}`, '_blank');
     }
   };
 
@@ -294,6 +303,11 @@ Obrigado pela preferência!`;
   };
 
   const executeFinalizeSale = async () => {
+    let waWindow: Window | null = null;
+    if (selectedCustomer && selectedCustomer.phone && !navigator.share) {
+       waWindow = window.open('about:blank', '_blank');
+    }
+
     try {
       const allInstallments: any[] = [];
       const methods = Object.keys(splitPayments);
@@ -406,14 +420,13 @@ Obrigado pela preferência!`;
       
       loadData();
 
-      // Auto-trigger WhatsApp if customer has phone
+      // Auto-trigger WhatsApp se tiver telefone
       if (saleDataObj.customer && saleDataObj.customer.phone) {
-        setTimeout(() => {
-          shareSaleReceipt(saleDataObj);
-        }, 300);
+        shareSaleReceipt(saleDataObj, waWindow);
       }
 
     } catch (error) {
+      if (waWindow) waWindow.close();
       console.error("Erro ao salvar venda:", error);
       setAlertMessage("Houve um erro ao tentar salvar a venda no banco de dados central.");
     }
@@ -586,29 +599,29 @@ Obrigado pela preferência!`;
         </div>
 
         <div className="cart-area">
+          <div className="payment-method-selector-horizontal" style={{ flexWrap: 'wrap' }}>
+            {[
+              { id: 'dinheiro', label: 'À Vista' },
+              { id: 'fiado', label: 'Crediário' }
+            ].map(opt => {
+              const isChecked = splitPayments[opt.id] !== undefined;
+              return (
+                <div key={opt.id} style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-start', gap: '5px', padding: '5px 10px', background: isChecked ? 'rgba(99, 102, 241, 0.1)' : 'transparent', borderRadius: '4px', border: isChecked ? '1px solid var(--primary)' : '1px solid transparent' }}>
+                  <label style={{ display: 'flex', alignItems: 'center', gap: '5px', cursor: 'pointer', margin: 0, fontSize: '0.9rem' }}>
+                    <input 
+                      type="radio" 
+                      name="paymentMethod"
+                      checked={isChecked}
+                      onChange={() => setSplitPayments({ [opt.id]: currentTotal })}
+                      style={{ cursor: 'pointer' }}
+                    />
+                    <span style={{ fontWeight: isChecked ? 600 : 400 }}>{opt.label}</span>
+                  </label>
+                </div>
+              );
+            })}
+          </div>
           <div className="cart-table-container">
-            <div className="payment-method-selector-horizontal" style={{ flexWrap: 'wrap' }}>
-              {[
-                { id: 'dinheiro', label: 'À Vista' },
-                { id: 'fiado', label: 'Crediário' }
-              ].map(opt => {
-                const isChecked = splitPayments[opt.id] !== undefined;
-                return (
-                  <div key={opt.id} style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-start', gap: '5px', padding: '5px 10px', background: isChecked ? 'rgba(99, 102, 241, 0.1)' : 'transparent', borderRadius: '4px', border: isChecked ? '1px solid var(--primary)' : '1px solid transparent' }}>
-                    <label style={{ display: 'flex', alignItems: 'center', gap: '5px', cursor: 'pointer', margin: 0, fontSize: '0.9rem' }}>
-                      <input 
-                        type="radio" 
-                        name="paymentMethod"
-                        checked={isChecked}
-                        onChange={() => setSplitPayments({ [opt.id]: currentTotal })}
-                        style={{ cursor: 'pointer' }}
-                      />
-                      <span style={{ fontWeight: isChecked ? 600 : 400 }}>{opt.label}</span>
-                    </label>
-                  </div>
-                );
-              })}
-            </div>
             <table className="cart-table">
               <thead>
                 <tr>
