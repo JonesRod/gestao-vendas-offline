@@ -633,15 +633,20 @@ export default function Inventory() {
                 
                 {formData.is_promotional && (
                   <>
-                    <div className="form-row">
+                    <div className="form-row" style={{ alignItems: 'flex-end' }}>
                       <div className="form-group">
                         <label style={{ color: 'var(--text-main)' }}>Valor Promocional à Vista (R$)</label>
                         <input type="text" required value={maskCurrency(formData.promo_price_cash || 0)} onChange={e => handlePromoPriceChange('cash', e.target.value)} style={{ borderColor: 'var(--primary)' }} />
                       </div>
-                      {formData.credit_type !== 'interest' && (
+                      {formData.credit_type !== 'interest' ? (
                         <div className="form-group">
                           <label style={{ color: 'var(--text-main)' }}>Valor Promocional a Prazo (R$)</label>
                           <input type="text" required value={maskCurrency(formData.promo_price_credit || 0)} onChange={e => handlePromoPriceChange('credit', e.target.value)} style={{ borderColor: 'var(--primary)' }} />
+                        </div>
+                      ) : (
+                        <div className="form-group">
+                          <label style={{ color: 'var(--text-main)' }}>Taxa de Juros ao Mês (%)</label>
+                          <input type="number" min="0" step="0.01" required value={formData.promo_interest_rate || 0} onChange={e => setFormData({...formData, promo_interest_rate: Number(e.target.value)})} style={{ borderColor: 'var(--primary)' }} />
                         </div>
                       )}
                     </div>
@@ -723,12 +728,23 @@ export default function Inventory() {
                 <div style={{ marginTop: '0.4rem', paddingLeft: '0.5rem' }}>
                   {(() => {
                     const maxInst = formData.max_installments || 1;
-                    let instValue = (formData.price_credit || 0) / maxInst;
-                    let totalValue = formData.price_credit || 0;
+                    let instValue = 0;
+                    let totalValue = 0;
                     
                     if (formData.credit_type === 'interest') {
-                      const interest = (formData.price_cash || 0) * ((formData.credit_interest_rate || 0) / 100) * maxInst;
-                      totalValue = (formData.price_cash || 0) + interest;
+                      let basePrice = formData.price_cash || 0;
+                      let rate = formData.credit_interest_rate || 0;
+                      
+                      if (formData.is_promotional && formData.promo_price_cash) {
+                        basePrice = formData.promo_price_cash;
+                        rate = formData.promo_interest_rate ?? rate;
+                      }
+                      
+                      const interest = basePrice * (rate / 100) * maxInst;
+                      totalValue = basePrice + interest;
+                      instValue = totalValue / maxInst;
+                    } else {
+                      totalValue = (formData.is_promotional && formData.promo_price_credit) ? formData.promo_price_credit : (formData.price_credit || 0);
                       instValue = totalValue / maxInst;
                     }
                     
