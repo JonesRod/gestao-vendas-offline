@@ -633,7 +633,7 @@ export default function Inventory() {
                 
                 {formData.is_promotional && (
                   <>
-                    <div className="form-row" style={{ alignItems: 'flex-end' }}>
+                    <div className="form-row promo-row">
                       <div className="form-group">
                         <label style={{ color: 'var(--text-main)' }}>Valor Promocional à Vista (R$)</label>
                         <input type="text" required value={maskCurrency(formData.promo_price_cash || 0)} onChange={e => handlePromoPriceChange('cash', e.target.value)} style={{ borderColor: 'var(--primary)' }} />
@@ -644,10 +644,18 @@ export default function Inventory() {
                           <input type="text" required value={maskCurrency(formData.promo_price_credit || 0)} onChange={e => handlePromoPriceChange('credit', e.target.value)} style={{ borderColor: 'var(--primary)' }} />
                         </div>
                       ) : (
-                        <div className="form-group">
-                          <label style={{ color: 'var(--text-main)' }}>Taxa de Juros ao Mês (%)</label>
-                          <input type="number" min="0" step="0.01" required value={formData.promo_interest_rate || 0} onChange={e => setFormData({...formData, promo_interest_rate: Number(e.target.value)})} style={{ borderColor: 'var(--primary)' }} />
-                        </div>
+                        <>
+                          <div className="form-group">
+                            <label style={{ color: 'var(--text-main)' }}>Taxa de Juros ao Mês (%)</label>
+                            <input type="number" min="0" step="0.01" required value={formData.promo_interest_rate || 0} onChange={e => setFormData({...formData, promo_interest_rate: Number(e.target.value)})} style={{ borderColor: 'var(--primary)' }} />
+                          </div>
+                          <div className="form-group">
+                            <label style={{ color: 'var(--text-main)' }}>
+                              {(formData.promo_interest_rate || 0) === 0 ? 'Parcelas (Sem juros)' : 'Máx. Parcelas'}
+                            </label>
+                            <input type="number" min="1" max="24" required value={formData.promo_max_installments || 1} onChange={e => setFormData({...formData, promo_max_installments: Number(e.target.value)})} style={{ borderColor: 'var(--primary)' }} />
+                          </div>
+                        </>
                       )}
                     </div>
                     <div className="form-row" style={{ marginTop: '1rem' }}>
@@ -730,6 +738,7 @@ export default function Inventory() {
                     const maxInst = formData.max_installments || 1;
                     let instValue = 0;
                     let totalValue = 0;
+                    let currentMaxInst = maxInst;
                     
                     if (formData.credit_type === 'interest') {
                       let basePrice = formData.price_cash || 0;
@@ -738,11 +747,12 @@ export default function Inventory() {
                       if (formData.is_promotional && formData.promo_price_cash) {
                         basePrice = formData.promo_price_cash;
                         rate = formData.promo_interest_rate ?? rate;
+                        currentMaxInst = formData.promo_max_installments || maxInst;
                       }
                       
-                      const interest = basePrice * (rate / 100) * maxInst;
+                      const interest = basePrice * (rate / 100) * currentMaxInst;
                       totalValue = basePrice + interest;
-                      instValue = totalValue / maxInst;
+                      instValue = totalValue / currentMaxInst;
                     } else {
                       totalValue = (formData.is_promotional && formData.promo_price_credit) ? formData.promo_price_credit : (formData.price_credit || 0);
                       instValue = totalValue / maxInst;
@@ -750,7 +760,7 @@ export default function Inventory() {
                     
                     return (
                       <span style={{ fontSize: '0.85rem', color: 'var(--primary)', fontWeight: 500 }}>
-                        Prévia: {maxInst}x de R$ {instValue.toLocaleString('pt-BR', {minimumFractionDigits: 2, maximumFractionDigits: 2})} 
+                        Prévia: {currentMaxInst}x de R$ {instValue.toLocaleString('pt-BR', {minimumFractionDigits: 2, maximumFractionDigits: 2})} 
                         {' '}(Total a Prazo: R$ {totalValue.toLocaleString('pt-BR', {minimumFractionDigits: 2, maximumFractionDigits: 2})})
                       </span>
                     );

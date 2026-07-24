@@ -64,6 +64,7 @@ export interface Product {
   promo_price_cash?: number;
   promo_price_credit?: number;
   promo_interest_rate?: number;
+  promo_max_installments?: number;
   promo_start_date?: string | null;
   promo_end_date?: string | null;
   kit_items?: KitItem[];
