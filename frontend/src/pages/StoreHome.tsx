@@ -124,10 +124,22 @@ export default function StoreHome() {
                 <span className="current-price text-warning">
                   {(() => {
                     if (product.credit_type === 'interest') {
-                      const maxInst = product.max_installments || 1;
+                      let maxInst = product.max_installments || 1;
+                      let rate = product.credit_interest_rate || 0;
+                      
+                      if (isPromo) {
+                        rate = product.promo_interest_rate ?? rate;
+                        maxInst = product.promo_max_installments || maxInst;
+                      }
+
                       const basePrice = priceCash; // Uses the already determined cash price (which considers promos)
-                      const interest = basePrice * ((product.credit_interest_rate || 0) / 100) * maxInst;
+                      const interest = basePrice * (rate / 100) * maxInst;
                       const instValue = (basePrice + interest) / maxInst;
+                      
+                      if (rate === 0) {
+                         return `${maxInst}x de R$ ${instValue.toLocaleString('pt-BR', {minimumFractionDigits: 2, maximumFractionDigits: 2})} (Sem juros)`;
+                      }
+                      
                       return `${maxInst}x de R$ ${instValue.toLocaleString('pt-BR', {minimumFractionDigits: 2, maximumFractionDigits: 2})}`;
                     }
                     return `R$ ${priceCredit.toLocaleString('pt-BR', {minimumFractionDigits: 2})}`;

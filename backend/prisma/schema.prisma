@@ -79,6 +79,8 @@ model Product {
   is_promotional               Boolean? @default(false)
   promo_price_cash             Float?
   promo_price_credit           Float?
+  promo_interest_rate          Float?
+  promo_max_installments       Int?
   promo_start_date             DateTime?
   promo_end_date               DateTime?
   created_at                   DateTime @default(now())

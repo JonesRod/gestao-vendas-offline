@@ -29,6 +29,12 @@ export default function Inventory() {
   const [editingCategoryId, setEditingCategoryId] = useState<number | null>(null);
   const [editingCategoryName, setEditingCategoryName] = useState('');
   const [categoryToDelete, setCategoryToDelete] = useState<number | null>(null);
+  const [toastMessage, setToastMessage] = useState<{text: string, type: 'success' | 'error'} | null>(null);
+
+  const showToast = (text: string, type: 'success' | 'error') => {
+    setToastMessage({ text, type });
+    setTimeout(() => setToastMessage(null), 3000);
+  };
 
   const fetchProducts = async () => {
     try {
@@ -295,6 +301,8 @@ export default function Inventory() {
       is_promotional: formData.is_promotional || false,
       promo_price_cash: Number(formData.promo_price_cash) || 0,
       promo_price_credit: Number(formData.promo_price_credit) || 0,
+      promo_interest_rate: Number(formData.promo_interest_rate) || 0,
+      promo_max_installments: Number(formData.promo_max_installments) || 1,
       promo_start_date: formData.promo_start_date || null,
       promo_end_date: formData.promo_end_date || null
     };
@@ -308,8 +316,10 @@ export default function Inventory() {
       setIsModalOpen(false);
       setFormData(initialFormState);
       fetchProducts();
+      showToast('Produto salvo com sucesso!', 'success');
     } catch (error) {
       console.error("Erro ao salvar produto", error);
+      showToast('Erro ao salvar produto. Verifique os dados.', 'error');
     }
   };
 
@@ -329,6 +339,27 @@ export default function Inventory() {
 
   return (
     <div className="inventory-container">
+      {toastMessage && (
+        <div style={{
+          position: 'fixed',
+          bottom: '20px',
+          left: '50%',
+          transform: 'translateX(-50%)',
+          backgroundColor: toastMessage.type === 'success' ? '#10b981' : '#ef4444',
+          color: '#fff',
+          padding: '12px 24px',
+          borderRadius: '8px',
+          boxShadow: '0 4px 12px rgba(0,0,0,0.15)',
+          zIndex: 9999,
+          fontWeight: 500,
+          display: 'flex',
+          alignItems: 'center',
+          gap: '8px',
+          animation: 'fadeIn 0.3s ease-out'
+        }}>
+          {toastMessage.text}
+        </div>
+      )}
       <div className="page-header">
         <h1 className="page-title">Produtos</h1>
         <div style={{ display: 'flex', gap: '0.5rem', width: '100%', maxWidth: '400px' }}>
@@ -410,20 +441,41 @@ export default function Inventory() {
               <div className="price-section">
                 <div className="price-group">
                   <span className="price-label">Din/Pix</span>
-                  <span className="price-value">R$ {product.price_cash.toLocaleString('pt-BR', {minimumFractionDigits: 2, maximumFractionDigits: 2})}</span>
+                  {product.is_promotional && product.promo_price_cash ? (
+                    <div style={{ display: 'flex', flexDirection: 'column' }}>
+                      <span className="price-value" style={{ textDecoration: 'line-through', fontSize: '0.85em', color: 'var(--text-muted)' }}>
+                        R$ {product.price_cash.toLocaleString('pt-BR', {minimumFractionDigits: 2, maximumFractionDigits: 2})}
+                      </span>
+                      <span className="price-value" style={{ color: 'var(--warning)' }}>
+                        R$ {product.promo_price_cash.toLocaleString('pt-BR', {minimumFractionDigits: 2, maximumFractionDigits: 2})}
+                      </span>
+                    </div>
+                  ) : (
+                    <span className="price-value">R$ {product.price_cash.toLocaleString('pt-BR', {minimumFractionDigits: 2, maximumFractionDigits: 2})}</span>
+                  )}
                 </div>
                 <div className="price-group">
                   <span className="price-label">Prazo/Crédito</span>
-                  <span className="price-value credit">
+                  <span className="price-value credit" style={product.is_promotional ? { color: 'var(--warning)' } : {}}>
                     {(() => {
                       if (product.credit_type === 'interest') {
-                        const maxInst = product.max_installments || 1;
-                        const basePrice = product.price_cash;
-                        const interest = basePrice * ((product.credit_interest_rate || 0) / 100) * maxInst;
+                        let basePrice = product.price_cash;
+                        let rate = product.credit_interest_rate || 0;
+                        let maxInst = product.max_installments || 1;
+                        
+                        if (product.is_promotional) {
+                          basePrice = product.promo_price_cash || basePrice;
+                          rate = product.promo_interest_rate ?? rate;
+                          maxInst = product.promo_max_installments || maxInst;
+                        }
+                        
+                        const interest = basePrice * (rate / 100) * maxInst;
                         const instValue = (basePrice + interest) / maxInst;
                         return `${maxInst}x de R$ ${instValue.toLocaleString('pt-BR', {minimumFractionDigits: 2, maximumFractionDigits: 2})}`;
+                      } else {
+                        const total = (product.is_promotional && product.promo_price_credit) ? product.promo_price_credit : product.price_credit;
+                        return `R$ ${total.toLocaleString('pt-BR', {minimumFractionDigits: 2, maximumFractionDigits: 2})}`;
                       }
-                      return `R$ ${product.price_credit.toLocaleString('pt-BR', {minimumFractionDigits: 2, maximumFractionDigits: 2})}`;
                     })()}
                   </span>
                 </div>
