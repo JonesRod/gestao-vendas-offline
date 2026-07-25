@@ -456,7 +456,7 @@ export default function Inventory() {
                 </div>
                 <div className="price-group">
                   <span className="price-label">Prazo/Crédito</span>
-                  <span className="price-value credit" style={product.is_promotional ? { color: 'var(--warning)' } : {}}>
+                  <span className="price-value credit" style={{ fontSize: '0.85em', lineHeight: '1.2', ...(product.is_promotional ? { color: 'var(--warning)' } : {}) }}>
                     {(() => {
                       if (product.credit_type === 'interest') {
                         let basePrice = product.price_cash;
@@ -471,7 +471,10 @@ export default function Inventory() {
                         
                         const interest = basePrice * (rate / 100) * maxInst;
                         const instValue = (basePrice + interest) / maxInst;
-                        return `${maxInst}x de R$ ${instValue.toLocaleString('pt-BR', {minimumFractionDigits: 2, maximumFractionDigits: 2})}`;
+                        if (rate === 0) {
+                          return `Até ${maxInst}x de R$ ${instValue.toLocaleString('pt-BR', {minimumFractionDigits: 2, maximumFractionDigits: 2})} (Sem juros)`;
+                        }
+                        return `Até ${maxInst}x de R$ ${instValue.toLocaleString('pt-BR', {minimumFractionDigits: 2, maximumFractionDigits: 2})}`;
                       } else {
                         const total = (product.is_promotional && product.promo_price_credit) ? product.promo_price_credit : product.price_credit;
                         return `R$ ${total.toLocaleString('pt-BR', {minimumFractionDigits: 2, maximumFractionDigits: 2})}`;

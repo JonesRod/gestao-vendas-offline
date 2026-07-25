@@ -121,7 +121,7 @@ export default function StoreHome() {
             {(product.allow_credit !== false && hasActiveCredit) && (
               <div className="price-item">
                 <span className="price-label">A Prazo</span>
-                <span className="current-price text-warning">
+                <span className="current-price text-warning" style={{ fontSize: '0.85em', lineHeight: '1.2' }}>
                   {(() => {
                     if (product.credit_type === 'interest') {
                       let maxInst = product.max_installments || 1;
@@ -137,10 +137,10 @@ export default function StoreHome() {
                       const instValue = (basePrice + interest) / maxInst;
                       
                       if (rate === 0) {
-                         return `${maxInst}x de R$ ${instValue.toLocaleString('pt-BR', {minimumFractionDigits: 2, maximumFractionDigits: 2})} (Sem juros)`;
+                         return `Até ${maxInst}x de R$ ${instValue.toLocaleString('pt-BR', {minimumFractionDigits: 2, maximumFractionDigits: 2})} (Sem juros)`;
                       }
                       
-                      return `${maxInst}x de R$ ${instValue.toLocaleString('pt-BR', {minimumFractionDigits: 2, maximumFractionDigits: 2})}`;
+                      return `Até ${maxInst}x de R$ ${instValue.toLocaleString('pt-BR', {minimumFractionDigits: 2, maximumFractionDigits: 2})}`;
                     }
                     return `R$ ${priceCredit.toLocaleString('pt-BR', {minimumFractionDigits: 2})}`;
                   })()}
