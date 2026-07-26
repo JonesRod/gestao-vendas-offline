@@ -257,12 +257,17 @@ export default function AdminOrders() {
                               className="btn-secondary" 
                               style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '0.5rem' }}
                               onClick={() => {
-                                const printWindow = window.open('', '_blank', 'width=400,height=600');
-                                if (printWindow) {
-                                  printWindow.document.write(generatePrintHtml(sale, settings));
-                                  printWindow.document.close();
-                                  printWindow.focus();
-                                  setTimeout(() => { printWindow.print(); printWindow.close(); }, 500);
+                                const iframe = document.createElement('iframe');
+                                iframe.style.display = 'none';
+                                document.body.appendChild(iframe);
+                                if (iframe.contentDocument && iframe.contentWindow) {
+                                  iframe.contentDocument.write(generatePrintHtml(sale, settings));
+                                  iframe.contentDocument.close();
+                                  iframe.contentWindow.focus();
+                                  setTimeout(() => {
+                                    iframe.contentWindow!.print();
+                                    setTimeout(() => document.body.removeChild(iframe), 1000);
+                                  }, 500);
                                 }
                               }}
                             >

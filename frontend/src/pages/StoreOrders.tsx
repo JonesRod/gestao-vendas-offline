@@ -218,12 +218,17 @@ export default function StoreOrders() {
                   className="btn-secondary" 
                   style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '0.5rem', padding: '0.75rem', borderRadius: '8px', border: '1px solid var(--border-color)', background: 'transparent', color: 'var(--text-main)', cursor: 'pointer' }}
                   onClick={() => {
-                    const printWindow = window.open('', '_blank', 'width=400,height=600');
-                    if (printWindow) {
-                      printWindow.document.write(generatePrintHtml(order, settings));
-                      printWindow.document.close();
-                      printWindow.focus();
-                      setTimeout(() => { printWindow.print(); printWindow.close(); }, 500);
+                    const iframe = document.createElement('iframe');
+                    iframe.style.display = 'none';
+                    document.body.appendChild(iframe);
+                    if (iframe.contentDocument && iframe.contentWindow) {
+                      iframe.contentDocument.write(generatePrintHtml(order, settings));
+                      iframe.contentDocument.close();
+                      iframe.contentWindow.focus();
+                      setTimeout(() => {
+                        iframe.contentWindow!.print();
+                        setTimeout(() => document.body.removeChild(iframe), 1000);
+                      }, 500);
                     }
                   }}
                 >
