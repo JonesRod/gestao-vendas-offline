@@ -72,6 +72,15 @@ export default function StoreLayout() {
         if (overdueInsts.length > 0 && dismissed.overdueInsts !== overdueInsts.length) {
            newNotifs.push({ id: 'insts', count: overdueInsts.length, type: 'danger', text: `Você possui ${overdueInsts.length} fatura(s) vencida(s).` });
         }
+        
+        const recentSales = salesRes.data.filter((s:any) => s.status === 'completed' && new Date(s.date).getTime() > Date.now() - 48 * 60 * 60 * 1000);
+        const dismissedNewSales = dismissed.newSales || [];
+        const unseenSales = recentSales.filter((s:any) => !dismissedNewSales.includes(s.id));
+
+        if (unseenSales.length > 0) {
+           newNotifs.push({ id: 'new_sales', count: unseenSales.length, type: 'success', text: `Você tem ${unseenSales.length} nova(s) compra(s) registrada(s)!`, unseenIds: unseenSales.map((s:any)=>s.id) });
+        }
+
         setNotifications(newNotifs);
       } catch (e) {
         console.error(e);
@@ -182,6 +191,12 @@ export default function StoreLayout() {
                       localStorage.setItem('dismissedNotifsStore', JSON.stringify(dismissed));
                       setNotifications(prev => prev.filter(x => x.id !== 'insts'));
                       navigate('/loja/faturas?highlight=overdue');
+                    }
+                    if (n.id === 'new_sales') {
+                      dismissed.newSales = [...(dismissed.newSales || []), ...n.unseenIds];
+                      localStorage.setItem('dismissedNotifsStore', JSON.stringify(dismissed));
+                      setNotifications(prev => prev.filter(x => x.id !== 'new_sales'));
+                      navigate('/loja/pedidos');
                     }
                   }}
                   onMouseEnter={(e) => e.currentTarget.style.background = 'rgba(255,255,255,0.1)'}

@@ -21,12 +21,14 @@ export default function Pos() {
   const [showDueDateModal, setShowDueDateModal] = useState(false);
   const [showAddressModal, setShowAddressModal] = useState(false);
   const [dueDate, setDueDate] = useState('');
-  const [saleDate, setSaleDate] = useState<string>(new Date().toISOString().split('T')[0]);
+  const now = new Date();
+  const localDateStr = new Date(now.getTime() - now.getTimezoneOffset() * 60000).toISOString().split('T')[0];
+  const [saleDate, setSaleDate] = useState<string>(localDateStr);
   const [manualInvoiceNumber, setManualInvoiceNumber] = useState<string>('');
   const [showConfirmModal, setShowConfirmModal] = useState(false);
   const [alertMessage, setAlertMessage] = useState<string | null>(null);
   const [itemToDelete, setItemToDelete] = useState<number | null>(null);
-  const [downPayment, setDownPayment] = useState<string>('');
+  const [downPaymentMethods, setDownPaymentMethods] = useState<Record<string, number>>({});
   const [customers, setCustomers] = useState<Customer[]>([]);
   const [pendingInstallments, setPendingInstallments] = useState<any[]>([]);
 
@@ -76,12 +78,16 @@ export default function Pos() {
     let productsText = '';
     if (saleData.cart && saleData.cart.length > 0) {
        productsText = saleData.cart.map((i: any) => {
-         const price = (!saleData.isCreditSale || i.credit_type === 'interest') ? i.price_cash : i.price_credit;
+         const isPromo = i.is_promotional;
+         const cashPrice = isPromo && i.promo_price_cash ? i.promo_price_cash : i.price_cash;
+         const creditPrice = isPromo && i.promo_price_credit ? i.promo_price_credit : i.price_credit;
+         const price = (!saleData.isCreditSale || i.credit_type === 'interest') ? cashPrice : creditPrice;
          const discount = parseFloat(i.discount?.replace(',', '.') || '0');
          const itemBaseTotal = (price * i.quantity) - discount;
          let itemTotalInterest = 0;
          if (saleData.isCreditSale && i.credit_type === 'interest') {
-            itemTotalInterest = itemBaseTotal * ((i.credit_interest_rate || 0) / 100) * (i.selected_installments || 1);
+            const rate = isPromo ? (i.promo_interest_rate ?? (i.credit_interest_rate || 0)) : (i.credit_interest_rate || 0);
+            itemTotalInterest = itemBaseTotal * (rate / 100) * (i.selected_installments || 1);
          }
          const totalItem = itemBaseTotal + itemTotalInterest;
          const instCount = i.selected_installments || 1;
@@ -206,14 +212,18 @@ Obrigado pela preferência!`;
   const isCreditSale = 'cartao_credito' in splitPayments || 'fiado' in splitPayments;
 
   const currentTotal = cart.reduce((sum, item) => {
-    const price = (!isCreditSale || item.credit_type === 'interest') ? item.price_cash : item.price_credit;
+    const isPromo = item.is_promotional;
+    const cashPrice = isPromo && item.promo_price_cash ? item.promo_price_cash : item.price_cash;
+    const creditPrice = isPromo && item.promo_price_credit ? item.promo_price_credit : item.price_credit;
+    const price = (!isCreditSale || item.credit_type === 'interest') ? cashPrice : creditPrice;
     const discount = parseFloat(item.discount?.replace(',', '.') || '0');
     const itemBaseTotal = (price * item.quantity) - discount;
     let interest = 0;
     if (isCreditSale && item.credit_type === 'interest') {
-      const rate = (item.credit_interest_rate || 0) / 100;
+      let rate = item.credit_interest_rate || 0;
+      if (isPromo) rate = item.promo_interest_rate ?? rate;
       const instCount = item.selected_installments || 1;
-      interest = itemBaseTotal * rate * instCount;
+      interest = itemBaseTotal * (rate / 100) * instCount;
     }
     return sum + itemBaseTotal + interest;
   }, 0);
@@ -224,6 +234,14 @@ Obrigado pela preferência!`;
       setSplitPayments({ [methods[0]]: currentTotal });
     }
   }, [currentTotal]);
+
+  useEffect(() => {
+    if ('fiado' in splitPayments) {
+      if (!selectedCustomer || selectedCustomer.is_blocked || selectedCustomer.credit_limit <= 0) {
+        setSplitPayments({ dinheiro: currentTotal });
+      }
+    }
+  }, [selectedCustomer]);
 
 
 
@@ -239,15 +257,27 @@ Obrigado pela preferência!`;
       (c.email && c.email.toLowerCase().includes(term));
   }).slice(0, 5);
 
-  const handleDownPaymentChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    let value = e.target.value.replace(/\D/g, '');
-    if (!value) {
-      setDownPayment('');
-      return;
-    }
-    const floatValue = parseInt(value, 10) / 100;
-    setDownPayment(floatValue.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 }));
+  const toggleDownPaymentMethod = (id: string) => {
+    setDownPaymentMethods(prev => {
+      const next = { ...prev };
+      if (next[id] !== undefined) {
+        delete next[id];
+      } else {
+        next[id] = 0;
+      }
+      return next;
+    });
   };
+
+  const handleDownPaymentMethodChange = (id: string, value: string) => {
+    const numericValue = parseFloat(value.replace(/\D/g, '')) / 100 || 0;
+    setDownPaymentMethods(prev => ({
+      ...prev,
+      [id]: numericValue
+    }));
+  };
+
+  const getDownPaymentTotal = () => Object.values(downPaymentMethods).reduce((sum, val) => sum + val, 0);
 
   const handleFinalizeSale = async () => {
     if (cart.length === 0) return;
@@ -312,15 +342,22 @@ Obrigado pela preferência!`;
       const allInstallments: any[] = [];
       const methods = Object.keys(splitPayments);
       
+      const isFiado = 'fiado' in splitPayments;
+      const downPaymentTotal = getDownPaymentTotal();
+      
       let finalPaymentMethodStr = '';
-      if (methods.length === 1 && splitPayments[methods[0]] === currentTotal) {
+      if (isFiado && downPaymentTotal > 0) {
+        const splitArr = [{ method: 'fiado', amount: currentTotal - downPaymentTotal }];
+        Object.entries(downPaymentMethods).forEach(([method, amount]) => {
+          if (amount > 0) splitArr.push({ method, amount });
+        });
+        finalPaymentMethodStr = JSON.stringify(splitArr);
+      } else if (methods.length === 1 && splitPayments[methods[0]] === currentTotal) {
         finalPaymentMethodStr = methods[0];
       } else {
         const splitArr = methods.map(m => ({ method: m, amount: splitPayments[m] })).filter(m => m.amount > 0);
         finalPaymentMethodStr = JSON.stringify(splitArr);
       }
-
-      const isFiado = 'fiado' in splitPayments;
 
       if (isFiado && selectedCustomer?.id) {
         const [y, m, d] = dueDate.split('-');
@@ -328,19 +365,20 @@ Obrigado pela preferência!`;
         const baseMonth = Number(m) - 1;
         const baseDay = Number(d);
 
+        const installmentsMap = new Map();
         cart.forEach(item => {
-          const price = (!isFiado || item.credit_type === 'interest') ? item.price_cash : item.price_credit;
+          const price = (!isFiado || item.credit_type === 'interest') ? (item.is_promotional && item.promo_price_cash ? item.promo_price_cash : item.price_cash) : (item.is_promotional && item.promo_price_credit ? item.promo_price_credit : item.price_credit);
           const discount = parseFloat(item.discount?.replace(',', '.') || '0');
           const itemBaseTotal = (price * item.quantity) - discount;
           let interest = 0;
           if (isFiado && item.credit_type === 'interest') {
-             const rate = (item.credit_interest_rate || 0) / 100;
-             const instCount = item.selected_installments || 1;
-             interest = itemBaseTotal * rate * instCount;
+            const rate = item.is_promotional ? (item.promo_interest_rate ?? (item.credit_interest_rate || 0)) : (item.credit_interest_rate || 0);
+            const instCount = item.selected_installments || 1;
+            interest = itemBaseTotal * (rate / 100) * instCount;
           }
           const itemTotalAmount = itemBaseTotal + interest;
 
-          const parsedDownPayment = parseFloat(downPayment.replace(/\./g, '').replace(',', '.')) || 0;
+          const parsedDownPayment = downPaymentTotal;
           const safeDownPayment = Math.min(parsedDownPayment, currentTotal);
           const itemRatio = currentTotal > 0 ? itemTotalAmount / currentTotal : 0;
           const itemDownPayment = safeDownPayment * itemRatio;
@@ -357,18 +395,40 @@ Obrigado pela preferência!`;
 
           for (let i = 1; i <= installmentsCount; i++) {
             const dateObj = new Date(baseYear, baseMonth + (i - 1), baseDay);
-            allInstallments.push({
-              customerId: selectedCustomer.id,
-              amount: installmentValue,
-              due_date: dateObj,
-              status: 'pending',
-              number: i,
-              total: installmentsCount,
-              productName: item.name,
-              punctuality_discount_value: punctualityPerInstallment,
-              loyalty_discount_value: loyaltyPerInstallment
-            });
+            const timeKey = dateObj.getTime();
+            
+            if (!installmentsMap.has(timeKey)) {
+              installmentsMap.set(timeKey, {
+                customerId: selectedCustomer.id,
+                amount: 0,
+                due_date: dateObj,
+                status: 'pending',
+                productNames: [],
+                punctuality_discount_value: 0,
+                loyalty_discount_value: 0
+              });
+            }
+            const inst = installmentsMap.get(timeKey);
+            inst.amount += installmentValue;
+            inst.punctuality_discount_value += punctualityPerInstallment;
+            inst.loyalty_discount_value += loyaltyPerInstallment;
+            inst.productNames.push(item.name);
           }
+        });
+
+        const sortedInstallments = Array.from(installmentsMap.values()).sort((a, b) => a.due_date.getTime() - b.due_date.getTime());
+        sortedInstallments.forEach((inst, idx) => {
+          allInstallments.push({
+            customerId: inst.customerId,
+            amount: inst.amount,
+            due_date: inst.due_date,
+            status: inst.status,
+            number: idx + 1,
+            total: sortedInstallments.length,
+            productName: inst.productNames.join(', '),
+            punctuality_discount_value: inst.punctuality_discount_value,
+            loyalty_discount_value: inst.loyalty_discount_value
+          });
         });
       }
 
@@ -378,16 +438,42 @@ Obrigado pela preferência!`;
         paymentMethod: finalPaymentMethodStr,
         status: 'completed',
         items: cart.map(item => {
+          const isPromo = item.is_promotional;
+          const cashPrice = isPromo && item.promo_price_cash ? item.promo_price_cash : item.price_cash;
+          const creditPrice = isPromo && item.promo_price_credit ? item.promo_price_credit : item.price_credit;
           const discount = parseFloat(item.discount?.replace(',', '.') || '0');
-          const basePrice = !isFiado ? item.price_cash : item.price_credit;
+          const basePrice = (!isFiado || item.credit_type === 'interest') ? cashPrice : creditPrice;
           const finalUnitPrice = (basePrice * item.quantity - discount) / item.quantity;
+          
+          let instCount = null;
+          let instValue = null;
+          if (isFiado) {
+             const itemBaseTotal = (basePrice * item.quantity) - discount;
+             let interest = 0;
+             if (item.credit_type === 'interest') {
+               const rate = isPromo ? (item.promo_interest_rate ?? (item.credit_interest_rate || 0)) : (item.credit_interest_rate || 0);
+               const count = item.selected_installments || 1;
+               interest = itemBaseTotal * (rate / 100) * count;
+             }
+             const itemTotalAmount = itemBaseTotal + interest;
+             instCount = item.selected_installments || 1;
+             instValue = itemTotalAmount / instCount;
+          }
+
           return {
             productId: item.id,
             quantity: item.quantity,
-            price_applied: finalUnitPrice
+            price_applied: finalUnitPrice,
+            installments_count: instCount,
+            installment_value: instValue
           };
         }),
-        date: new Date(saleDate).toISOString(),
+        date: (() => {
+          const [year, month, day] = saleDate.split('-');
+          const saleDateTime = new Date();
+          saleDateTime.setFullYear(Number(year), Number(month) - 1, Number(day));
+          return saleDateTime.toISOString();
+        })(),
         installments: allInstallments
       };
 
@@ -401,7 +487,7 @@ Obrigado pela preferência!`;
         customer: selectedCustomer,
         date: new Date(),
         installments: allInstallments,
-        downPayment: parseFloat(downPayment.replace(/\./g, '').replace(',', '.')) || 0
+        downPayment: downPaymentTotal
       };
 
       setLastSaleData(saleDataObj);
@@ -413,7 +499,7 @@ Obrigado pela preferência!`;
       setSearchTerm('');
       setSaleDate(new Date().toISOString().split('T')[0]);
       setManualInvoiceNumber('');
-      setDownPayment('');
+      setDownPaymentMethods({});
       setShowDueDateModal(false);
       setShowConfirmModal(false);
       setShowSuccess(true);
@@ -572,21 +658,34 @@ Obrigado pela preferência!`;
           
           <div className="product-quick-list">
              {filteredProducts.map(product => {
-               const maxInst = product.max_installments || 1;
-               let przText = `Prz: R$ ${product.price_credit.toLocaleString('pt-BR', {minimumFractionDigits: 2, maximumFractionDigits: 2})}`;
+               const isPromo = product.is_promotional;
+               let maxInst = product.max_installments || 1;
+               let rate = product.credit_interest_rate || 0;
+               let cashPrice = product.price_cash;
+               let creditPrice = product.price_credit;
+               
+               if (isPromo) {
+                 maxInst = product.promo_max_installments || maxInst;
+                 rate = product.promo_interest_rate ?? rate;
+                 cashPrice = product.promo_price_cash || cashPrice;
+                 creditPrice = product.promo_price_credit || creditPrice;
+               }
+
+               let przText = `Prz: R$ ${creditPrice.toLocaleString('pt-BR', {minimumFractionDigits: 2, maximumFractionDigits: 2})}`;
                if (product.allow_credit !== false) {
-                 let instValue = product.price_credit / maxInst;
+                 let instValue = creditPrice / maxInst;
                  if (product.credit_type === 'interest') {
-                   const interest = product.price_cash * ((product.credit_interest_rate || 0) / 100) * maxInst;
-                   instValue = (product.price_cash + interest) / maxInst;
+                   const interest = cashPrice * (rate / 100) * maxInst;
+                   instValue = (cashPrice + interest) / maxInst;
                  }
-                 przText = `Prz: ${maxInst}x de R$ ${instValue.toLocaleString('pt-BR', {minimumFractionDigits: 2, maximumFractionDigits: 2})}`;
+                 const semJuros = product.credit_type === 'interest' && rate === 0 ? ' (Sem juros)' : '';
+                 przText = `Prz: Até ${maxInst}x de R$ ${instValue.toLocaleString('pt-BR', {minimumFractionDigits: 2, maximumFractionDigits: 2})}${semJuros}`;
                }
                return (
                <div key={product.id} className="quick-product-card" onClick={() => addToCart(product)}>
                  <span>{product.name}</span>
                  <div className="prices">
-                   <span className="price-cash">À Vista: R$ {product.price_cash.toLocaleString('pt-BR', {minimumFractionDigits: 2, maximumFractionDigits: 2})}</span>
+                   <span className="price-cash">À Vista: R$ {cashPrice.toLocaleString('pt-BR', {minimumFractionDigits: 2, maximumFractionDigits: 2})}</span>
                    <span className="price-credit">{przText}</span>
                  </div>
                </div>
@@ -602,7 +701,7 @@ Obrigado pela preferência!`;
           <div className="payment-method-selector-horizontal" style={{ flexWrap: 'wrap' }}>
             {[
               { id: 'dinheiro', label: 'À Vista' },
-              { id: 'fiado', label: 'Crediário' }
+              ...(selectedCustomer && selectedCustomer.credit_limit > 0 && !selectedCustomer.is_blocked ? [{ id: 'fiado', label: 'Crediário' }] : [])
             ].map(opt => {
               const isChecked = splitPayments[opt.id] !== undefined;
               return (
@@ -644,12 +743,22 @@ Obrigado pela preferência!`;
                   </tr>
                 ) : (
                   cart.map(item => {
-                    const itemPrice = (!isCreditSale || item.credit_type === 'interest') ? item.price_cash : item.price_credit;
+                    const isPromo = item.is_promotional;
+                    const cashPrice = isPromo && item.promo_price_cash ? item.promo_price_cash : item.price_cash;
+                    const creditPrice = isPromo && item.promo_price_credit ? item.promo_price_credit : item.price_credit;
+                    let maxInst = item.max_installments || 1;
+                    let rate = item.credit_interest_rate || 0;
+                    if (isPromo) {
+                      maxInst = item.promo_max_installments || maxInst;
+                      rate = item.promo_interest_rate ?? rate;
+                    }
+                    
+                    const itemPrice = (!isCreditSale || item.credit_type === 'interest') ? cashPrice : creditPrice;
                     const discount = parseFloat(item.discount?.replace(',', '.') || '0');
                     const itemBaseTotal = (itemPrice * item.quantity) - discount;
                     let itemTotalInterest = 0;
                     if (isCreditSale && item.credit_type === 'interest') {
-                       itemTotalInterest = itemBaseTotal * ((item.credit_interest_rate || 0) / 100) * (item.selected_installments || 1);
+                       itemTotalInterest = itemBaseTotal * (rate / 100) * (item.selected_installments || 1);
                     }
                     const totalItem = itemBaseTotal + itemTotalInterest;
                     return (
@@ -680,16 +789,18 @@ Obrigado pela preferência!`;
                                 onChange={(e) => updateItemInstallments(item.id, Number(e.target.value))}
                                 className="installments-select"
                               >
-                                {Array.from({ length: item.max_installments || 1 }).map((_, i) => {
+                                {Array.from({ length: maxInst }).map((_, i) => {
                                   const instCount = i + 1;
                                   let instValue = itemBaseTotal / instCount;
                                   if (item.credit_type === 'interest') {
-                                    const interest = itemBaseTotal * ((item.credit_interest_rate || 0) / 100) * instCount;
+                                    const interest = itemBaseTotal * (rate / 100) * instCount;
                                     instValue = (itemBaseTotal + interest) / instCount;
                                   }
+                                  const labelValue = `R$ ${instValue.toLocaleString('pt-BR', {minimumFractionDigits: 2, maximumFractionDigits: 2})}`;
+                                  const semJuros = item.credit_type === 'interest' && rate === 0 ? ' - Sem juros' : '';
                                   return (
                                     <option key={instCount} value={instCount}>
-                                      {instCount}x {item.credit_type === 'interest' ? `(R$ ${instValue.toLocaleString('pt-BR', {minimumFractionDigits: 2, maximumFractionDigits: 2})})` : ''}
+                                      {instCount}x ({labelValue}{semJuros})
                                     </option>
                                   )
                                 })}
@@ -788,12 +899,16 @@ Obrigado pela preferência!`;
             </thead>
             <tbody>
               {lastSaleData.cart.map((item: any, i: number) => {
-                const price = (!lastSaleData.isCreditSale || item.credit_type === 'interest') ? item.price_cash : item.price_credit;
+                const isPromo = item.is_promotional;
+                const cashPrice = isPromo && item.promo_price_cash ? item.promo_price_cash : item.price_cash;
+                const creditPrice = isPromo && item.promo_price_credit ? item.promo_price_credit : item.price_credit;
+                const price = (!lastSaleData.isCreditSale || item.credit_type === 'interest') ? cashPrice : creditPrice;
                 const discount = parseFloat(item.discount?.replace(',', '.') || '0');
                 const itemBaseTotal = (price * item.quantity) - discount;
                 let itemTotalInterest = 0;
                 if (lastSaleData.isCreditSale && item.credit_type === 'interest') {
-                   itemTotalInterest = itemBaseTotal * ((item.credit_interest_rate || 0) / 100) * (item.selected_installments || 1);
+                   const rate = isPromo ? (item.promo_interest_rate ?? (item.credit_interest_rate || 0)) : (item.credit_interest_rate || 0);
+                   itemTotalInterest = itemBaseTotal * (rate / 100) * (item.selected_installments || 1);
                 }
                 const totalItem = itemBaseTotal + itemTotalInterest;
                 const instCount = item.selected_installments || 1;
@@ -897,13 +1012,42 @@ Obrigado pela preferência!`;
               </div>
               <div className="form-group" style={{ marginTop: '1rem' }}>
                 <label>Valor de Entrada (Opcional - R$)</label>
-                <input
-                  type="text"
-                  placeholder="Ex: 50,00"
-                  value={downPayment}
-                  onChange={handleDownPaymentChange}
-                  style={{ width: '100%', padding: '0.8rem', borderRadius: '8px', background: 'transparent', border: '1px solid var(--border-color)', color: 'var(--text-main)', marginTop: '0.5rem' }}
-                />
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '10px', background: 'var(--bg-main)', padding: '15px', borderRadius: '8px', border: '1px solid var(--border-color)', marginTop: '0.5rem' }}>
+                  {[
+                    { id: 'dinheiro', label: 'Dinheiro' },
+                    { id: 'pix', label: 'PIX' },
+                    { id: 'cartao_credito', label: 'Cartão Crédito' },
+                    { id: 'cartao_debito', label: 'Cartão Débito' },
+                    { id: 'boleto', label: 'Boleto/Transf.' }
+                  ].map(opt => {
+                    const isChecked = downPaymentMethods[opt.id] !== undefined;
+                    return (
+                      <div key={opt.id} style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-start', gap: '8px' }}>
+                        <label style={{ display: 'flex', alignItems: 'center', gap: '8px', minWidth: '150px', cursor: 'pointer', margin: 0, color: 'var(--text-main)' }}>
+                          <input 
+                            type="checkbox" 
+                            checked={isChecked}
+                            onChange={() => toggleDownPaymentMethod(opt.id)}
+                            style={{ width: '18px', height: '18px', cursor: 'pointer' }}
+                          />
+                          <span style={{ fontWeight: isChecked ? 600 : 400 }}>{opt.label}</span>
+                        </label>
+                        {isChecked && (
+                          <div style={{ display: 'flex', alignItems: 'center', gap: '5px', width: '100%', paddingLeft: '26px' }}>
+                            <span style={{ color: 'var(--text-muted)' }}>R$</span>
+                            <input 
+                              type="text"
+                              value={downPaymentMethods[opt.id].toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                              onChange={e => handleDownPaymentMethodChange(opt.id, e.target.value)}
+                              style={{ width: '100%', maxWidth: '200px', padding: '8px', borderRadius: '4px', border: '1px solid var(--border-color)', background: 'var(--bg-panel)', color: 'var(--text-main)' }}
+                              required
+                            />
+                          </div>
+                        )}
+                      </div>
+                    );
+                  })}
+                </div>
               </div>
 
               {/* Preview das Parcelas */}
@@ -915,7 +1059,7 @@ Obrigado pela preferência!`;
                  const baseMonth = Number(m) - 1;
                  const baseDay = Number(d);
 
-                 const parsedDownPayment = parseFloat(downPayment.replace(/\./g, '').replace(',', '.')) || 0;
+                 const parsedDownPayment = getDownPaymentTotal();
                  const safeDownPayment = Math.min(parsedDownPayment, currentTotal);
 
                  const installmentsMap = new Map();

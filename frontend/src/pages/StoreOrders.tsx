@@ -1,8 +1,9 @@
-import React, { useState, useEffect } from 'react';
+import { useState, useEffect } from 'react';
 import { api } from '../services/api';
 import { useAuth } from '../contexts/AuthContext';
-import { Package, ArrowLeft, Calendar, CreditCard, Clock, CheckCircle, XCircle } from 'lucide-react';
+import { Package, ArrowLeft, Calendar, CreditCard, Clock, CheckCircle, XCircle, ChevronDown, ChevronUp } from 'lucide-react';
 import { Link, useLocation } from 'react-router-dom';
+import { generatePrintHtml, generateShareText } from '../utils/receipt';
 
 export default function StoreOrders() {
   const location = useLocation();
@@ -10,15 +11,21 @@ export default function StoreOrders() {
 
   const { user } = useAuth();
   const [orders, setOrders] = useState<any[]>([]);
+  const [settings, setSettings] = useState<any>(null);
   const [loading, setLoading] = useState(true);
   const [filter, setFilter] = useState<string>(highlightParam === 'pending' ? 'pending' : 'all');
+  const [expandedId, setExpandedId] = useState<number | null>(null);
 
   useEffect(() => {
     const fetchOrders = async () => {
       if (!user?.id) return;
       try {
-        const response = await api.get(`/sales?customerId=${user.id}`);
+        const [response, settingsRes] = await Promise.all([
+          api.get(`/sales?customerId=${user.id}`),
+          api.get('/settings')
+        ]);
         setOrders(response.data);
+        setSettings(settingsRes.data);
       } catch (err) {
         console.error('Failed to load orders', err);
       } finally {
@@ -38,12 +45,26 @@ export default function StoreOrders() {
   };
 
   const getPaymentName = (method: string) => {
+    if (!method) return '-';
+    try {
+      if (method.startsWith('[')) {
+        const parsed = JSON.parse(method);
+        return parsed.map((p: any) => `${getPaymentName(p.method)} (R$ ${p.amount.toLocaleString('pt-BR', {minimumFractionDigits:2, maximumFractionDigits:2})})`).join(' + ');
+      }
+    } catch(e) {}
+    
+    if (method.includes('fiado')) return 'Crediário';
+    if (method.includes('dinheiro')) return 'Dinheiro';
+    if (method.includes('pix')) return 'PIX';
+    if (method.includes('cartao_credito')) return 'Cartão de Crédito';
+    if (method.includes('cartao_debito')) return 'Cartão de Débito';
+    
     switch (method) {
       case 'credit': return 'Crediário';
       case 'credit_card': return 'Cartão de Crédito';
       case 'debit_card': return 'Cartão de Débito';
-      case 'pix': return 'PIX';
       case 'money': return 'Dinheiro';
+      case 'boleto': return 'Boleto/Transf.';
       default: return method;
     }
   };
@@ -113,7 +134,10 @@ export default function StoreOrders() {
             const isHighlighted = highlightParam === 'pending' && order.status === 'pending';
             return (
             <div key={order.id} className="glass-panel" style={{ padding: '1.5rem', borderRadius: '12px', border: isHighlighted ? '2px solid var(--warning)' : 'none', background: isHighlighted ? 'rgba(245, 158, 11, 0.1)' : '' }}>
-              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', flexWrap: 'wrap', gap: '1rem', marginBottom: '1rem', paddingBottom: '1rem', borderBottom: '1px solid var(--border-color)' }}>
+              <div 
+                style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', flexWrap: 'wrap', gap: '1rem', marginBottom: expandedId === order.id ? '1rem' : 0, paddingBottom: expandedId === order.id ? '1rem' : 0, borderBottom: expandedId === order.id ? '1px solid var(--border-color)' : 'none', cursor: 'pointer' }}
+                onClick={() => setExpandedId(expandedId === order.id ? null : order.id)}
+              >
                 <div>
                   <h3 style={{ margin: '0 0 0.5rem 0', color: 'var(--text-main)' }}>Pedido #{order.id}</h3>
                   <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', color: 'var(--text-secondary)', fontSize: '0.9rem' }}>
@@ -121,10 +145,18 @@ export default function StoreOrders() {
                     {new Date(order.date).toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit' })}
                   </div>
                 </div>
-                <div>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '1rem' }}>
                   {getStatusBadge(order.status)}
+                  <button 
+                    style={{ background: 'transparent', border: 'none', color: 'var(--text-secondary)', cursor: 'pointer', padding: '0.25rem', display: 'flex', alignItems: 'center' }}
+                  >
+                    {expandedId === order.id ? <ChevronUp size={20} /> : <ChevronDown size={20} />}
+                  </button>
                 </div>
               </div>
+
+              {expandedId === order.id && (
+                <>
 
               <div style={{ marginBottom: '1rem' }}>
                 <h4 style={{ margin: '0 0 0.5rem 0', color: 'var(--text-secondary)', fontSize: '0.9rem', textTransform: 'uppercase' }}>Itens</h4>
@@ -132,9 +164,13 @@ export default function StoreOrders() {
                   {order.items && order.items.map((item: any) => (
                     <div key={item.id} style={{ display: 'flex', justifyContent: 'space-between', color: 'var(--text-main)', fontSize: '0.95rem' }}>
                       <span>{item.quantity}x {item.product?.name || `Produto #${item.productId}`}</span>
-                      {!order.paymentMethod?.includes('credit') && (
+                      {!order.paymentMethod?.includes('credit') && !order.paymentMethod?.includes('fiado') ? (
                         <span>R$ {(item.quantity * item.price_applied).toLocaleString('pt-BR', {minimumFractionDigits: 2, maximumFractionDigits: 2})}</span>
-                      )}
+                      ) : item.installments_count ? (
+                        <span style={{ color: 'var(--success)' }}>
+                          {item.installments_count}x de R$ {item.installment_value.toLocaleString('pt-BR', {minimumFractionDigits:2, maximumFractionDigits:2})}
+                        </span>
+                      ) : null}
                     </div>
                   ))}
                 </div>
@@ -176,6 +212,38 @@ export default function StoreOrders() {
                   </span>
                 </div>
               </div>
+
+              <div style={{ display: 'flex', gap: '1rem', marginTop: '1rem', borderTop: '1px solid var(--border-color)', paddingTop: '1rem' }}>
+                <button 
+                  className="btn-secondary" 
+                  style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '0.5rem', padding: '0.75rem', borderRadius: '8px', border: '1px solid var(--border-color)', background: 'transparent', color: 'var(--text-main)', cursor: 'pointer' }}
+                  onClick={() => {
+                    const printWindow = window.open('', '_blank', 'width=400,height=600');
+                    if (printWindow) {
+                      printWindow.document.write(generatePrintHtml(order, settings));
+                      printWindow.document.close();
+                      printWindow.focus();
+                      setTimeout(() => { printWindow.print(); printWindow.close(); }, 500);
+                    }
+                  }}
+                >
+                  <Package size={18} /> Imprimir Recibo
+                </button>
+                <button 
+                  className="btn-primary" 
+                  style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '0.5rem', padding: '0.75rem', borderRadius: '8px', background: '#25D366', color: 'white', border: 'none', cursor: 'pointer' }}
+                  onClick={() => {
+                    const text = generateShareText(order, settings);
+                    const encoded = encodeURIComponent(text);
+                    const waUrl = `https://wa.me/?text=${encoded}`;
+                    window.open(waUrl, '_blank', 'width=800,height=600');
+                  }}
+                >
+                  Compartilhar
+                </button>
+              </div>
+              </>
+              )}
             </div>
             );
           })}

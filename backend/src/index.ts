@@ -182,7 +182,10 @@ app.get('/api/sales', async (req, res) => {
   const sales = await prisma.sale.findMany({ 
     where: whereClause,
     include: { items: { include: { product: true } }, installments: true, customer: true },
-    orderBy: { date: 'desc' }
+    orderBy: [
+      { date: 'desc' },
+      { id: 'desc' }
+    ]
   });
   res.json(sales);
 });

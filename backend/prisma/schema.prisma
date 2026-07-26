@@ -120,8 +120,10 @@ model SaleItem {
   id            Int   @id @default(autoincrement())
   saleId        Int
   productId     Int
-  quantity      Int
-  price_applied Float
+  quantity           Int
+  price_applied      Float
+  installments_count Int?
+  installment_value  Float?
 
   sale    Sale    @relation(fields: [saleId], references: [id])
   product Product @relation(fields: [productId], references: [id])

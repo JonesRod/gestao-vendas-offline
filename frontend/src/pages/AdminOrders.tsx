@@ -4,6 +4,8 @@ import { Package, CreditCard, Clock, CheckCircle, XCircle, FileText, Search, Use
 import { useLocation } from 'react-router-dom';
 import Modal from '../components/Modal';
 
+import { generatePrintHtml, generateShareText } from '../utils/receipt';
+
 const formatPaymentMethod = (methodStr: string): string => {
   if (!methodStr) return '-';
   try {
@@ -27,6 +29,7 @@ export default function AdminOrders() {
   const highlightParam = new URLSearchParams(location.search).get('highlight');
 
   const [sales, setSales] = useState<any[]>([]);
+  const [settings, setSettings] = useState<any>(null);
   const [searchTerm, setSearchTerm] = useState('');
   const [filter, setFilter] = useState<string>(highlightParam === 'pending' ? 'pending' : 'all');
   const [expandedId, setExpandedId] = useState<number | null>(null);
@@ -37,6 +40,7 @@ export default function AdminOrders() {
     if (highlightParam === 'pending') {
       setFilter('pending');
     }
+    api.get('/settings').then(res => setSettings(res.data)).catch(console.error);
   }, [highlightParam]);
 
   useEffect(() => {
@@ -192,7 +196,7 @@ export default function AdminOrders() {
                             <h4 style={{ color: 'var(--text-main)', marginBottom: '1rem', display: 'flex', alignItems: 'center', gap: '0.5rem' }}><Package size={18} /> Itens do Pedido</h4>
                             <div style={{ background: 'var(--bg-panel)', padding: '1rem', borderRadius: '8px', display: 'flex', flexDirection: 'column', gap: '0.75rem' }}>
                               {sale.items.map((item: any) => {
-                                const isCreditSale = sale.paymentMethod?.includes('credit') || sale.paymentMethod === 'fiado';
+                                const isCreditSale = sale.paymentMethod?.includes('credit') || sale.paymentMethod?.includes('fiado');
                                 const totalItem = item.quantity * item.price_applied;
                                 return (
                                   <div key={item.id} style={{ borderBottom: '1px solid var(--border-color)', paddingBottom: '0.75rem' }}>
@@ -206,8 +210,12 @@ export default function AdminOrders() {
                                             R$ {totalItem.toLocaleString('pt-BR', {minimumFractionDigits:2, maximumFractionDigits:2})}
                                           </span>
                                         )}
-                                        {isCreditSale && item.product?.price_cash != null && (
-                                          <span style={{ fontWeight: '500', color: 'var(--success)', textDecoration: 'none' }}>
+                                        {isCreditSale && item.installments_count ? (
+                                          <span style={{ fontWeight: '500', color: 'var(--success)' }}>
+                                            {item.installments_count}x de R$ {item.installment_value.toLocaleString('pt-BR', {minimumFractionDigits:2, maximumFractionDigits:2})}
+                                          </span>
+                                        ) : isCreditSale && item.product?.price_cash != null && (
+                                          <span style={{ fontWeight: '500', color: 'var(--success)' }}>
                                             À vista: R$ {item.product.price_cash.toLocaleString('pt-BR', {minimumFractionDigits:2, maximumFractionDigits:2})}
                                           </span>
                                         )}
@@ -243,6 +251,36 @@ export default function AdminOrders() {
                               </div>
                             </div>
                           )}
+
+                          <div style={{ display: 'flex', gap: '1rem', marginTop: '1rem', borderTop: '1px solid var(--border-color)', paddingTop: '1rem' }}>
+                            <button 
+                              className="btn-secondary" 
+                              style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '0.5rem' }}
+                              onClick={() => {
+                                const printWindow = window.open('', '_blank', 'width=400,height=600');
+                                if (printWindow) {
+                                  printWindow.document.write(generatePrintHtml(sale, settings));
+                                  printWindow.document.close();
+                                  printWindow.focus();
+                                  setTimeout(() => { printWindow.print(); printWindow.close(); }, 500);
+                                }
+                              }}
+                            >
+                              <FileText size={18} /> Imprimir Recibo
+                            </button>
+                            <button 
+                              className="btn-primary" 
+                              style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '0.5rem', background: '#25D366', color: 'white', border: 'none' }}
+                              onClick={() => {
+                                const text = generateShareText(sale, settings);
+                                const encoded = encodeURIComponent(text);
+                                const waUrl = `https://wa.me/?text=${encoded}`;
+                                window.open(waUrl, '_blank', 'width=800,height=600');
+                              }}
+                            >
+                              Compartilhar
+                            </button>
+                          </div>
                         </div>
                       </div>
                     </td>
