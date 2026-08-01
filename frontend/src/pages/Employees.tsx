@@ -10,12 +10,39 @@ import './Employees.css';
 export default function Employees() {
   const [searchTerm, setSearchTerm] = useState('');
   const [isModalOpen, setIsModalOpen] = useState(false);
+  const [showCustomerDropdown, setShowCustomerDropdown] = useState(false);
   const initialFormState: Partial<Employee> = {
     name: '', role: 'Vendedor', phone: '', cpf: '', email: '', birth_date: '', is_active: true,
     address: { cep: '', street: '', number: '', neighborhood: '', city: '', state: '', observation: '' }
   };
   const [formData, setFormData] = useState<Partial<Employee>>(initialFormState);
   const employees = useLiveQuery(() => db.employees.toArray()) || [];
+  const [customers, setCustomers] = useState<any[]>([]);
+
+  useEffect(() => {
+    api.get('/customers').then(res => setCustomers(res.data)).catch(console.error);
+  }, []);
+
+  const handleSelectCustomer = (customer: any) => {
+    setFormData({
+      ...formData,
+      name: customer.name,
+      cpf: customer.cpf || '',
+      email: customer.email || '',
+      birth_date: customer.birth_date || '',
+      phone: customer.phone || '',
+      address: {
+        cep: customer.cep || '',
+        street: customer.street || '',
+        number: customer.number || '',
+        neighborhood: customer.neighborhood || '',
+        city: customer.city || '',
+        state: customer.state || '',
+        observation: customer.observation || ''
+      }
+    });
+    setShowCustomerDropdown(false);
+  };
 
   const filteredEmployees = employees.filter((e: Employee) => 
     e.name.toLowerCase().includes(searchTerm.toLowerCase())
@@ -159,9 +186,58 @@ export default function Employees() {
         <form onSubmit={handleSubmit}>
           <h3 style={{fontSize: '1rem', marginBottom: '1rem', color: 'var(--primary)'}}>Dados Pessoais</h3>
           
-          <div className="form-group">
-            <label>Nome Completo</label>
-            <input type="text" required value={formData.name} onChange={e => setFormData({...formData, name: e.target.value})} />
+          <div className="form-group" style={{ position: 'relative' }}>
+            <label>Nome Completo (Buscar Cliente)</label>
+            <input 
+              type="text" 
+              required 
+              value={formData.name} 
+              onChange={e => {
+                setFormData({...formData, name: e.target.value});
+                if (!formData.id) setShowCustomerDropdown(true);
+              }}
+              onFocus={() => {
+                if (!formData.id) setShowCustomerDropdown(true);
+              }}
+              onBlur={() => {
+                // Delay to allow click event on dropdown items
+                setTimeout(() => setShowCustomerDropdown(false), 200);
+              }}
+            />
+            {showCustomerDropdown && formData.name && customers.filter(c => c.name.toLowerCase().includes(formData.name!.toLowerCase())).length > 0 && (
+              <div className="customer-autocomplete-dropdown" style={{ 
+                position: 'absolute', 
+                top: '100%', 
+                left: 0, 
+                right: 0, 
+                background: 'var(--bg-panel)', 
+                border: '1px solid var(--border)', 
+                borderRadius: '8px',
+                zIndex: 10, 
+                maxHeight: '200px', 
+                overflowY: 'auto',
+                boxShadow: '0 4px 6px rgba(0,0,0,0.3)',
+                marginTop: '4px'
+              }}>
+                {customers.filter(c => c.name.toLowerCase().includes(formData.name!.toLowerCase())).map(c => (
+                   <div 
+                     key={c.id} 
+                     style={{ 
+                       padding: '0.75rem 1rem', 
+                       cursor: 'pointer', 
+                       borderBottom: '1px solid var(--border)',
+                       color: 'var(--text-color)'
+                     }} 
+                     onClick={() => handleSelectCustomer(c)}
+                     onMouseEnter={(e) => (e.currentTarget.style.background = 'rgba(255, 255, 255, 0.05)')}
+                     onMouseLeave={(e) => (e.currentTarget.style.background = 'transparent')}
+                   >
+                     <strong>{c.name}</strong> <br/>
+                     <small style={{ color: 'var(--text-muted)' }}>CPF: {c.cpf || 'Não informado'} | Tel: {c.phone || 'Não informado'}</small>
+                   </div>
+                ))}
+              </div>
+            )}
           </div>
 
           <div className="form-row">

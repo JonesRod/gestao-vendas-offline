@@ -223,6 +223,8 @@ model Settings {
   payment_api_key        String?
   payment_webhook_secret String?
 
+  cart_reservation_time  Int? @default(15) // Tempo de reserva do carrinho em minutos
+
   updated_at DateTime?
 }
 
