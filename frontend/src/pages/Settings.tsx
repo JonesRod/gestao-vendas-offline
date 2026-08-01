@@ -264,6 +264,54 @@ export default function Settings() {
             </div>
           </div>
 
+          <div className="rule-section">
+            <div className="rule-header">
+              <div className="rule-title">
+                <h4>Reserva de Carrinho</h4>
+              </div>
+              <p>Defina o tempo máximo que os itens permanecem no carrinho do cliente.</p>
+            </div>
+            <div className="rule-body">
+              <div className="form-row">
+                <div className="form-group">
+                  <label>Tempo de Reserva</label>
+                  <div style={{display: 'flex', alignItems: 'center', gap: '1rem'}}>
+                    <div style={{display: 'flex', alignItems: 'center', gap: '0.5rem'}}>
+                      <input 
+                        type="number" 
+                        min="0" 
+                        value={Math.floor((formData.cart_reservation_time ?? 15) / 60)} 
+                        onChange={e => {
+                          const currentMins = (formData.cart_reservation_time ?? 15) % 60;
+                          const newHours = Number(e.target.value);
+                          setFormData({...formData, cart_reservation_time: (newHours * 60) + currentMins});
+                        }} 
+                        style={{maxWidth: '80px'}} 
+                      />
+                      <span>horas</span>
+                    </div>
+                    <div style={{display: 'flex', alignItems: 'center', gap: '0.5rem'}}>
+                      <input 
+                        type="number" 
+                        min="0"
+                        max="59"
+                        value={(formData.cart_reservation_time ?? 15) % 60} 
+                        onChange={e => {
+                          const currentHours = Math.floor((formData.cart_reservation_time ?? 15) / 60);
+                          const newMins = Number(e.target.value);
+                          setFormData({...formData, cart_reservation_time: (currentHours * 60) + newMins});
+                        }} 
+                        style={{maxWidth: '80px'}} 
+                      />
+                      <span>minutos</span>
+                    </div>
+                  </div>
+                </div>
+              </div>
+              <p style={{ fontSize: '0.85rem', color: 'var(--text-muted)' }}>* Ao adicionar itens ao carrinho (Storefront), um relógio regressivo será exibido ao cliente. Se o tempo zerar, o carrinho será limpo.</p>
+            </div>
+          </div>
+
         </div>
 
         {/* BLOCO 3: Integração e Comunicação (Mensageria) */}

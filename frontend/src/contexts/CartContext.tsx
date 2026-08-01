@@ -1,5 +1,6 @@
 import React, { createContext, useContext, useState, useEffect } from 'react';
-import type { Product } from '../db/db';
+import { useLiveQuery } from 'dexie-react-hooks';
+import { db, type Product } from '../db/db';
 
 export interface CartItem {
   product: Product;
@@ -17,6 +18,7 @@ interface CartContextType {
   cartTotalCash: number;
   cartTotalCredit: number;
   cartCount: number;
+  cartExpiresAt: number | null;
 }
 
 const CartContext = createContext<CartContextType | undefined>(undefined);
@@ -26,10 +28,38 @@ export function CartProvider({ children }: { children: React.ReactNode }) {
     const saved = localStorage.getItem('@GestaoOffline:cart');
     return saved ? JSON.parse(saved) : [];
   });
+  
+  const [cartLastUpdatedAt, setCartLastUpdatedAt] = useState<number | null>(() => {
+    const saved = localStorage.getItem('@GestaoOffline:cartTime');
+    return saved ? parseInt(saved, 10) : null;
+  });
+
+  const settingsData = useLiveQuery(() => db.settings.get(1));
+  const reservationMinutes = settingsData?.cart_reservation_time ?? 15;
 
   useEffect(() => {
     localStorage.setItem('@GestaoOffline:cart', JSON.stringify(cart));
-  }, [cart]);
+    if (cart.length === 0) {
+      setCartLastUpdatedAt(null);
+      localStorage.removeItem('@GestaoOffline:cartTime');
+    } else if (cartLastUpdatedAt) {
+      localStorage.setItem('@GestaoOffline:cartTime', cartLastUpdatedAt.toString());
+    }
+  }, [cart, cartLastUpdatedAt]);
+
+  // Checa expiração a cada segundo
+  useEffect(() => {
+    if (cart.length > 0 && cartLastUpdatedAt) {
+      const interval = setInterval(() => {
+        const expiresAt = cartLastUpdatedAt + (reservationMinutes * 60 * 1000);
+        if (Date.now() >= expiresAt) {
+          clearCart();
+          // Pode disparar um alerta, mas o context limpa o state
+        }
+      }, 1000);
+      return () => clearInterval(interval);
+    }
+  }, [cart, cartLastUpdatedAt, reservationMinutes]);
 
   const addToCart = (product: Product, quantity = 1) => {
     setCart(prev => {
@@ -43,6 +73,7 @@ export function CartProvider({ children }: { children: React.ReactNode }) {
       }
       return [...prev, { product, quantity, installments: 1 }];
     });
+    setCartLastUpdatedAt(Date.now());
   };
 
   const removeFromCart = (productId: number) => {
@@ -94,7 +125,7 @@ export function CartProvider({ children }: { children: React.ReactNode }) {
   const cartCount = cart.reduce((count, item) => count + item.quantity, 0);
 
   return (
-    <CartContext.Provider value={{ cart, addToCart, removeFromCart, updateQuantity, updateInstallments, clearCart, cartTotalCash, cartTotalCredit, cartCount }}>
+    <CartContext.Provider value={{ cart, addToCart, removeFromCart, updateQuantity, updateInstallments, clearCart, cartTotalCash, cartTotalCredit, cartCount, cartExpiresAt: cartLastUpdatedAt ? cartLastUpdatedAt + (reservationMinutes * 60 * 1000) : null }}>
       {children}
     </CartContext.Provider>
   );

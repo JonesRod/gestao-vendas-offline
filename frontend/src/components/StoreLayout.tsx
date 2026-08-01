@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { Outlet, Link, useNavigate } from 'react-router-dom';
-import { ShoppingCart, User, LogOut, Package, ClipboardList, CreditCard, Bell } from 'lucide-react';
+import { ShoppingCart, User, LogOut, Package, ClipboardList, CreditCard, Bell, Clock } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext';
 import { useCart } from '../contexts/CartContext';
 import { api } from '../services/api';
@@ -30,6 +30,11 @@ export default function StoreLayout() {
           ]);
           
           if (settingsRes.data) {
+            try {
+              await db.settings.put({ ...settingsRes.data, id: 1 });
+            } catch (err) {
+              console.error('Error saving settings to local DB:', err);
+            }
             if (settingsRes.data.tradeName) {
               setStoreName(settingsRes.data.tradeName);
             }
@@ -92,6 +97,37 @@ export default function StoreLayout() {
     return () => clearInterval(interval);
   }, [user]);
 
+  const { cartExpiresAt } = useCart();
+  const [timeLeft, setTimeLeft] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (!cartExpiresAt || cartCount === 0) {
+      setTimeLeft(null);
+      return;
+    }
+    const updateTimer = () => {
+      const remaining = cartExpiresAt - Date.now();
+      if (remaining <= 0) {
+        setTimeLeft(null);
+        return;
+      }
+      const hours = Math.floor(remaining / 3600000);
+      const mins = Math.floor((remaining % 3600000) / 60000);
+      const secs = Math.floor((remaining % 60000) / 1000);
+      const formattedMins = mins.toString().padStart(2, '0');
+      const formattedSecs = secs.toString().padStart(2, '0');
+      
+      if (hours > 0) {
+        setTimeLeft(`${hours.toString().padStart(2, '0')}:${formattedMins}:${formattedSecs}`);
+      } else {
+        setTimeLeft(`${formattedMins}:${formattedSecs}`);
+      }
+    };
+    updateTimer();
+    const interval = setInterval(updateTimer, 1000);
+    return () => clearInterval(interval);
+  }, [cartExpiresAt, cartCount]);
+
   const handleLogout = () => {
     logout();
     navigate('/login');
@@ -120,9 +156,19 @@ export default function StoreLayout() {
               <ClipboardList size={24} />
             </Link>
 
-            <Link to="/loja/carrinho" className="cart-btn" title="Meu Carrinho">
-              <ShoppingCart size={24} />
-              <span className="cart-badge">{cartCount}</span>
+            <Link to="/loja/carrinho" className="cart-btn" title="Meu Carrinho" style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', textDecoration: 'none' }}>
+              <div style={{ position: 'relative', display: 'flex', alignItems: 'center' }}>
+                <ShoppingCart size={24} />
+                <span className="cart-badge">{cartCount}</span>
+              </div>
+              {timeLeft && (
+                <div style={{ position: 'relative', display: 'flex', alignItems: 'center', marginLeft: '0.2rem' }}>
+                  <Clock size={20} color="var(--primary)" className="blink-icon" />
+                  <div className="cart-timer-tooltip">
+                    Expira em {timeLeft}
+                  </div>
+                </div>
+              )}
             </Link>
             
             <div className="user-menu">

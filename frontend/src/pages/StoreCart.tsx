@@ -1,6 +1,6 @@
 import { useState, useEffect, useMemo } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
-import { ShoppingCart, Trash2, Plus, Minus, ArrowLeft, CheckSquare, Square, CheckCircle } from 'lucide-react';
+import { ShoppingCart, Trash2, Plus, Minus, ArrowLeft, CheckSquare, Square, CheckCircle, Clock } from 'lucide-react';
 import { useCart } from '../contexts/CartContext';
 import { useAuth } from '../contexts/AuthContext';
 import { api } from '../services/api';
@@ -8,7 +8,7 @@ import { api } from '../services/api';
 type PaymentMethodType = 'pix' | 'credit_card' | 'debit_card' | 'money' | 'store_credit';
 
 export default function StoreCart() {
-  const { cart, removeFromCart, updateQuantity, updateInstallments, clearCart, cartTotalCash, cartTotalCredit } = useCart();
+  const { cart, removeFromCart, updateQuantity, updateInstallments, clearCart, cartTotalCash, cartTotalCredit, cartExpiresAt } = useCart();
   const { user } = useAuth();
   const navigate = useNavigate();
 
@@ -28,6 +28,36 @@ export default function StoreCart() {
   const hasActiveCredit = user && user.credit_limit > 0 && !user.is_blocked;
   const isCreditMode = payments.store_credit.selected;
   const currentTotal = isCreditMode ? cartTotalCredit : cartTotalCash;
+
+  const [timeLeft, setTimeLeft] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (!cartExpiresAt || cart.length === 0) {
+      setTimeLeft(null);
+      return;
+    }
+    const updateTimer = () => {
+      const remaining = cartExpiresAt - Date.now();
+      if (remaining <= 0) {
+        setTimeLeft(null);
+        return;
+      }
+      const hours = Math.floor(remaining / 3600000);
+      const mins = Math.floor((remaining % 3600000) / 60000);
+      const secs = Math.floor((remaining % 60000) / 1000);
+      const formattedMins = mins.toString().padStart(2, '0');
+      const formattedSecs = secs.toString().padStart(2, '0');
+      
+      if (hours > 0) {
+        setTimeLeft(`${hours.toString().padStart(2, '0')}:${formattedMins}:${formattedSecs}`);
+      } else {
+        setTimeLeft(`${formattedMins}:${formattedSecs}`);
+      }
+    };
+    updateTimer();
+    const interval = setInterval(updateTimer, 1000);
+    return () => clearInterval(interval);
+  }, [cartExpiresAt, cart.length]);
 
   useEffect(() => {
     setPayments(prev => {
@@ -345,12 +375,19 @@ export default function StoreCart() {
 
   return (
     <div className="store-container" style={{ paddingBottom: '4rem' }}>
-      <div style={{ display: 'flex', alignItems: 'center', gap: '1rem', marginBottom: '2rem' }}>
+      <div style={{ display: 'flex', alignItems: 'center', gap: '1rem', marginBottom: '1rem' }}>
         <Link to="/loja" style={{ background: 'var(--bg-panel)', border: '1px solid var(--border-color)', color: 'var(--text-main)', padding: '0.5rem', borderRadius: '8px', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
           <ArrowLeft size={20} />
         </Link>
         <h2 style={{ margin: 0, color: 'var(--text-main)' }}>Meu Carrinho</h2>
       </div>
+
+      {timeLeft && (
+        <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', background: 'rgba(255, 59, 48, 0.1)', color: 'var(--danger)', padding: '0.8rem 1rem', borderRadius: '8px', border: '1px solid rgba(255, 59, 48, 0.2)', marginBottom: '2rem' }}>
+           <Clock size={20} className="blink-icon" />
+           <span>Atenção: seus itens ficarão reservados por apenas <strong>{timeLeft}</strong>. Finalize o pedido!</span>
+        </div>
+      )}
 
       <div style={{ display: 'flex', flexDirection: 'column', gap: '2rem' }}>
         <div className="glass-panel" style={{ padding: '1.5rem', borderRadius: '12px' }}>

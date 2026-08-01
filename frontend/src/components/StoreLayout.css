@@ -214,3 +214,35 @@
     padding: 0.8rem;
   }
 }
+
+@keyframes blink {
+  0% { opacity: 1; }
+  50% { opacity: 0.3; }
+  100% { opacity: 1; }
+}
+.blink-icon {
+  animation: blink 1.5s infinite ease-in-out;
+}
+
+.cart-timer-tooltip {
+  position: absolute;
+  bottom: -35px;
+  right: 0;
+  background: var(--bg-panel);
+  border: 1px solid var(--border-color);
+  padding: 4px 8px;
+  border-radius: 4px;
+  font-size: 0.85rem;
+  color: var(--primary);
+  font-weight: bold;
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 0.2s;
+  white-space: nowrap;
+  box-shadow: 0 4px 10px rgba(0,0,0,0.3);
+  z-index: 100;
+}
+
+.cart-btn:hover .cart-timer-tooltip {
+  opacity: 1;
+}

@@ -159,6 +159,7 @@ export interface Settings {
   payment_gateway?: string;
   payment_api_key?: string;
   payment_webhook_secret?: string;
+  cart_reservation_time?: number;
   updated_at?: Date;
 }
 
