@@ -73,7 +73,7 @@ export function CartProvider({ children }: { children: React.ReactNode }) {
       }
       return [...prev, { product, quantity, installments: 1 }];
     });
-    setCartLastUpdatedAt(Date.now());
+    setCartLastUpdatedAt(prev => prev ? prev : Date.now());
   };
 
   const removeFromCart = (productId: number) => {
