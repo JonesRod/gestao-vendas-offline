@@ -167,6 +167,15 @@ export default function StoreHome() {
     );
   };
 
+  let sectionTitle = "Nossos Produtos";
+  if (filter === 'promo') sectionTitle = "Promoções";
+  else if (filter === 'favorites') sectionTitle = "⭐ Favoritos";
+  else if (filter.startsWith('cat_')) {
+    const catId = Number(filter.split('_')[1]);
+    const cat = categories.find(c => c.id === catId);
+    if (cat) sectionTitle = cat.name;
+  }
+
   return (
     <div className="store-container store-home">
       <div className="hero-section glass-panel">
@@ -226,7 +235,7 @@ export default function StoreHome() {
               
               {otherProducts.length > 0 && (
                 <div className="products-preview">
-                  <h2>Nossos Produtos</h2>
+                  <h2>{sectionTitle}</h2>
                   <div className="products-grid">
                     {otherProducts.map(p => renderProductCard(p, !!p.is_promotional))}
                   </div>
