@@ -165,6 +165,7 @@ export interface Settings {
   delivery_max_distance_km?: number;
   delivery_fixed_fee?: number;
   delivery_min_order_value?: number;
+  business_hours?: string;
   updated_at?: Date;
 }
 

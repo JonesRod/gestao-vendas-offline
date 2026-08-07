@@ -234,6 +234,8 @@ model Settings {
   delivery_min_order_value Float   @default(0)
   lat                      Float?
   lng                      Float?
+  business_hours           String?
+
 
   updated_at DateTime?
 }

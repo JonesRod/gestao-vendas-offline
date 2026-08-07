@@ -11,11 +11,21 @@ export default function Settings() {
   const [isSaved, setIsSaved] = useState(false);
   const [expandedSections, setExpandedSections] = useState<Record<string, boolean>>({
     loja: true,
+    jornada: true,
     regras: true,
     frete: true,
     mensagens: true,
     pagamentos: true,
   });
+
+  const defaultHours = Array.from({length: 7}).map(() => ({
+    isOpen: true,
+    openTime: '08:00',
+    closeTime: '18:00',
+    breakStart: '12:00',
+    breakEnd: '13:00'
+  }));
+  const [parsedHours, setParsedHours] = useState(defaultHours);
 
   const toggleSection = (section: string) => {
     setExpandedSections(prev => ({ ...prev, [section]: !prev[section] }));
@@ -36,6 +46,11 @@ export default function Settings() {
   useEffect(() => {
     if (settingsData) {
       setFormData(settingsData);
+      if (settingsData.business_hours) {
+        try {
+          setParsedHours(JSON.parse(settingsData.business_hours));
+        } catch (e) {}
+      }
     }
   }, [settingsData]);
 
@@ -63,7 +78,7 @@ export default function Settings() {
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     try {
-      const dataToSave = { ...formData, updated_at: new Date() } as SettingsType;
+      const dataToSave = { ...formData, business_hours: JSON.stringify(parsedHours), updated_at: new Date() } as SettingsType;
       
       const count = await db.settings.count();
       if (count === 0) {
@@ -213,6 +228,64 @@ export default function Settings() {
                   <input type="text" value={formData.address?.observation || ''} onChange={e => setFormData({...formData, address: {...formData.address!, observation: e.target.value}})} />
                 </div>
               </div>
+            </div>
+          )}
+        </div>
+
+        {/* BLOCO 2.1: Jornada de Atendimento */}
+        <div className="settings-card glass-panel">
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', cursor: 'pointer' }} onClick={() => toggleSection('jornada')}>
+            <div>
+              <h2 style={{ margin: 0 }}>Jornada de Atendimento</h2>
+              <p className="card-subtitle" style={{ margin: 0, marginTop: '0.2rem' }}>Configure os dias e horários de funcionamento da sua loja, incluindo intervalos.</p>
+            </div>
+            {expandedSections.jornada ? <ChevronUp size={24} color="var(--text-muted)" /> : <ChevronDown size={24} color="var(--text-muted)" />}
+          </div>
+          
+          {expandedSections.jornada && (
+            <div style={{ marginTop: '1.5rem', display: 'flex', flexDirection: 'column', gap: '1rem' }}>
+              {['Domingo', 'Segunda-feira', 'Terça-feira', 'Quarta-feira', 'Quinta-feira', 'Sexta-feira', 'Sábado'].map((day, index) => (
+                <div key={index} style={{ padding: '1rem', background: 'rgba(255,255,255,0.02)', borderRadius: '8px', border: '1px solid var(--border-color)', display: 'flex', flexDirection: 'column', gap: '0.8rem' }}>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                    <h4 style={{ margin: 0, color: 'var(--text-main)', width: '120px' }}>{day}</h4>
+                    <label className="toggle-switch">
+                      <input 
+                        type="checkbox" 
+                        checked={parsedHours[index].isOpen} 
+                        onChange={e => {
+                          const newArr = [...parsedHours];
+                          newArr[index].isOpen = e.target.checked;
+                          setParsedHours(newArr);
+                        }} 
+                      />
+                      <span className="slider"></span>
+                    </label>
+                  </div>
+                  
+                  {parsedHours[index].isOpen ? (
+                    <div className="form-row" style={{ marginTop: '0.5rem', gap: '1rem' }}>
+                      <div className="form-group" style={{ marginBottom: 0 }}>
+                        <label style={{ fontSize: '0.8rem' }}>Abertura</label>
+                        <input type="time" value={parsedHours[index].openTime} onChange={e => { const arr = [...parsedHours]; arr[index].openTime = e.target.value; setParsedHours(arr); }} />
+                      </div>
+                      <div className="form-group" style={{ marginBottom: 0 }}>
+                        <label style={{ fontSize: '0.8rem' }}>Início do Intervalo</label>
+                        <input type="time" value={parsedHours[index].breakStart} onChange={e => { const arr = [...parsedHours]; arr[index].breakStart = e.target.value; setParsedHours(arr); }} />
+                      </div>
+                      <div className="form-group" style={{ marginBottom: 0 }}>
+                        <label style={{ fontSize: '0.8rem' }}>Fim do Intervalo</label>
+                        <input type="time" value={parsedHours[index].breakEnd} onChange={e => { const arr = [...parsedHours]; arr[index].breakEnd = e.target.value; setParsedHours(arr); }} />
+                      </div>
+                      <div className="form-group" style={{ marginBottom: 0 }}>
+                        <label style={{ fontSize: '0.8rem' }}>Fechamento</label>
+                        <input type="time" value={parsedHours[index].closeTime} onChange={e => { const arr = [...parsedHours]; arr[index].closeTime = e.target.value; setParsedHours(arr); }} />
+                      </div>
+                    </div>
+                  ) : (
+                     <div style={{ color: 'var(--text-muted)', fontSize: '0.9rem', fontStyle: 'italic' }}>Loja Fechada neste dia.</div>
+                  )}
+                </div>
+              ))}
             </div>
           )}
         </div>
