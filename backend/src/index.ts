@@ -197,7 +197,7 @@ app.put('/api/sales/:id/status', async (req, res) => {
   try {
     const sale = await prisma.sale.findUnique({
       where: { id: Number(id) },
-      include: { items: true, installments: true }
+      include: { items: true, installments: true, customer: true }
     });
 
     if (!sale) return res.status(404).json({ error: 'Pedido não encontrado' });
@@ -239,8 +239,34 @@ app.put('/api/sales/:id/status', async (req, res) => {
           where: { id: sale.id },
           data: { status: 'cancelled' }
         });
+
+        // 1. Criar Notificação In-App
+        const customerName = sale.customer?.name || 'Desconhecido';
+        await tx.notification.create({
+          data: {
+            title: 'Pedido Cancelado',
+            message: `O cliente ${customerName} cancelou o pedido #${sale.id} no valor de R$ ${sale.totalAmount.toFixed(2)}.`,
+            type: 'DANGER',
+          }
+        });
       });
-      return res.json({ success: true, message: 'Pedido cancelado' });
+
+      // Busca configurações para disparos
+      const settings = await prisma.settings.findFirst();
+      
+      // 2. Disparo de WhatsApp (mock / shell)
+      if (settings?.whatsapp_token && settings?.whatsapp_instance) {
+         console.log(`[WHATSAPP] Simulando disparo para a loja sobre o cancelamento do pedido #${sale.id}. Instância: ${settings.whatsapp_instance}`);
+         // fetch(`https://api.whatsapp.../${settings.whatsapp_instance}/messages`, { ... })
+      }
+
+      // 3. Disparo de E-mail (mock / shell)
+      if (settings?.email_token && settings?.email_sender) {
+         console.log(`[EMAIL] Simulando disparo para a loja sobre o cancelamento do pedido #${sale.id}. Remetente: ${settings.email_sender}`);
+         // fetch(`https://api.email.../send`, { ... })
+      }
+
+      return res.json({ success: true, message: 'Pedido cancelado e notificações enviadas' });
     }
 
     // Apenas atualizar o status para outros (ex: completed)
@@ -307,6 +333,32 @@ app.post('/api/sales', async (req, res) => {
 
       return sale;
     });
+
+    try {
+      let customerName = 'Desconhecido';
+      if (saleData.customerId) {
+        const c = await prisma.customer.findUnique({ where: { id: saleData.customerId }});
+        if (c) customerName = c.name;
+      }
+      
+      await prisma.notification.create({
+        data: {
+          title: 'Novo Pedido Recebido!',
+          message: `O cliente ${customerName} acabou de realizar o pedido #${result.id} no valor de R$ ${result.totalAmount.toFixed(2)}.`,
+          type: 'SUCCESS',
+        }
+      });
+
+      const settings = await prisma.settings.findFirst();
+      if (settings?.whatsapp_token && settings?.whatsapp_instance) {
+         console.log(`[WHATSAPP] Novo pedido #${result.id} do cliente ${customerName}`);
+      }
+      if (settings?.email_token && settings?.email_sender) {
+         console.log(`[EMAIL] Novo pedido #${result.id} do cliente ${customerName}`);
+      }
+    } catch (notifErr) {
+      console.error('Erro ao gerar notificação do novo pedido', notifErr);
+    }
 
     res.json(result);
   } catch (err) {
@@ -746,19 +798,44 @@ app.get('/api/settings', async (req, res) => {
 });
 
 app.put('/api/settings', async (req, res) => {
-  const data = req.body;
-  
-  // Como só temos 1 registro de settings globalmente
-  let settings = await prisma.settings.findFirst();
-  if (!settings) {
-    settings = await prisma.settings.create({ data });
-  } else {
-    settings = await prisma.settings.update({
-      where: { id: settings.id },
-      data
-    });
+  try {
+    const data = req.body;
+    let settings = await prisma.settings.findFirst();
+    if (settings) {
+      settings = await prisma.settings.update({ where: { id: settings.id }, data });
+    } else {
+      settings = await prisma.settings.create({ data });
+    }
+    res.json(settings);
+  } catch (error) {
+    res.status(500).json({ error: 'Erro ao salvar configurações.' });
   }
-  res.json(settings);
+});
+
+// NOTIFICATIONS
+app.get('/api/notifications', async (req, res) => {
+  try {
+    const notifications = await prisma.notification.findMany({
+      orderBy: { created_at: 'desc' },
+      take: 50
+    });
+    res.json(notifications);
+  } catch (error) {
+    res.status(500).json({ error: 'Erro ao buscar notificações' });
+  }
+});
+
+app.put('/api/notifications/:id/read', async (req, res) => {
+  try {
+    const { id } = req.params;
+    const notification = await prisma.notification.update({
+      where: { id: Number(id) },
+      data: { is_read: true }
+    });
+    res.json(notification);
+  } catch (error) {
+    res.status(500).json({ error: 'Erro ao atualizar notificação' });
+  }
 });
 
 const PORT = process.env.PORT || 3000;

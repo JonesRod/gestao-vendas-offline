@@ -49,9 +49,10 @@ export default function Sidebar() {
 
     const fetchNotifs = async () => {
       try {
-        const [salesRes, instRes] = await Promise.all([
+        const [salesRes, instRes, dbNotifRes] = await Promise.all([
           api.get('/sales'),
-          api.get('/installments')
+          api.get('/installments'),
+          api.get('/notifications')
         ]);
         const pendingSales = salesRes.data.filter((s:any) => s.status === 'pending');
         const overdueInsts = instRes.data.filter((i:any) => i.status === 'pending' && new Date(i.due_date) < new Date());
@@ -65,6 +66,19 @@ export default function Sidebar() {
         if (overdueInsts.length > 0 && dismissed.overdueInsts !== overdueInsts.length) {
            newNotifs.push({ id: 'insts', count: overdueInsts.length, type: 'danger', text: `${overdueInsts.length} pagamento(s) atrasado(s).` });
         }
+
+        // Adiciona as notificações do banco de dados (cancelamentos, etc)
+        const unreadDbNotifs = (dbNotifRes.data || []).filter((n: any) => !n.is_read);
+        for (const n of unreadDbNotifs) {
+          newNotifs.push({
+            id: `db_${n.id}`,
+            dbId: n.id,
+            type: n.type.toLowerCase(),
+            text: n.message,
+            title: n.title
+          });
+        }
+
         setNotifications(newNotifs);
       } catch (e) {
         console.error(e);
@@ -251,25 +265,34 @@ export default function Sidebar() {
                 <div 
                   key={n.id} 
                   style={{ padding: '1rem', background: 'rgba(255,255,255,0.05)', borderRadius: '8px', borderLeft: `4px solid var(--${n.type})`, cursor: 'pointer', transition: 'background 0.2s' }}
-                  onClick={() => {
-                    setIsNotifModalOpen(false);
+                  onClick={async () => {
                     const dismissed = JSON.parse(localStorage.getItem('dismissedNotifs') || '{}');
                     if (n.id === 'sales') {
+                      setIsNotifModalOpen(false);
                       dismissed.pendingSales = n.count;
                       localStorage.setItem('dismissedNotifs', JSON.stringify(dismissed));
                       setNotifications(prev => prev.filter(x => x.id !== 'sales'));
                       navigate('/orders?highlight=pending');
-                    }
-                    if (n.id === 'insts') {
+                    } else if (n.id === 'insts') {
+                      setIsNotifModalOpen(false);
                       dismissed.overdueInsts = n.count;
                       localStorage.setItem('dismissedNotifs', JSON.stringify(dismissed));
                       setNotifications(prev => prev.filter(x => x.id !== 'insts'));
                       navigate('/receipts?highlight=overdue');
+                    } else if (n.id.startsWith('db_')) {
+                      // Mark as read in backend
+                      try {
+                        await api.put(`/notifications/${n.dbId}/read`);
+                        setNotifications(prev => prev.filter(x => x.id !== n.id));
+                      } catch (e) {
+                        console.error(e);
+                      }
                     }
                   }}
                   onMouseEnter={(e) => e.currentTarget.style.background = 'rgba(255,255,255,0.1)'}
                   onMouseLeave={(e) => e.currentTarget.style.background = 'rgba(255,255,255,0.05)'}
                 >
+                  {n.title && <strong style={{ display: 'block', color: 'var(--text-main)', marginBottom: '0.3rem' }}>{n.title}</strong>}
                   <p style={{ margin: 0, color: 'var(--text-main)' }}>{n.text}</p>
                 </div>
               ))}

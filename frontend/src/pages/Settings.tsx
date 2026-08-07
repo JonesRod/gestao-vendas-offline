@@ -97,7 +97,7 @@ export default function Settings() {
           }
 
           const { lat, lng, ...addrRest } = address;
-          apiPayload = { ...apiPayload, ...addrRest, lat: lat as number, lng: lng as number };
+          (apiPayload as any) = { ...apiPayload, ...addrRest, lat: lat as number, lng: lng as number };
         }
         await api.put('/settings', apiPayload);
       } catch (apiErr) {
