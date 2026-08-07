@@ -1,15 +1,25 @@
 import { useState, useEffect } from 'react';
-import { Save, ShieldCheck } from 'lucide-react';
+import { Save, ShieldCheck, ChevronDown, ChevronUp } from 'lucide-react';
 import { useLiveQuery } from 'dexie-react-hooks';
 import { db, type Settings as SettingsType } from '../db/db';
 import { api } from '../services/api';
-import { maskCNPJ, maskPhone, maskCEP, fetchAddressByCep, maskDate } from '../utils/masks';
+import { maskCNPJ, maskPhone, maskCEP, fetchAddressByCep, maskDate, maskCurrency, parseCurrency } from '../utils/masks';
 import './Settings.css';
 
 export default function Settings() {
   const settingsData = useLiveQuery(() => db.settings.get(1));
   const [isSaved, setIsSaved] = useState(false);
-  const [showAddress, setShowAddress] = useState(false);
+  const [expandedSections, setExpandedSections] = useState<Record<string, boolean>>({
+    loja: true,
+    regras: true,
+    frete: true,
+    mensagens: true,
+    pagamentos: true,
+  });
+
+  const toggleSection = (section: string) => {
+    setExpandedSections(prev => ({ ...prev, [section]: !prev[section] }));
+  };
 
   const initialFormState: Partial<SettingsType> = {
     email: '', phone: '', tradeName: '', companyName: '', cnpj: '', ownerBirthDate: '',
@@ -66,9 +76,28 @@ export default function Settings() {
       try {
         const { address, id, ...rest } = dataToSave;
         let apiPayload = { ...rest };
+        
         if (address) {
+          // Busca lat/lng automaticamente pelo CEP
+          if (formData.delivery_active && address.cep) {
+            try {
+              const resGeo = await fetch(`https://nominatim.openstreetmap.org/search?postalcode=${address.cep.replace(/[^0-9]/g, '')}&country=Brazil&format=json`);
+              const geodata = await resGeo.json();
+              if (geodata && geodata.length > 0) {
+                address.lat = parseFloat(geodata[0].lat);
+                address.lng = parseFloat(geodata[0].lon);
+              }
+            } catch (e) {
+              console.error('Falha ao buscar coordenadas:', e);
+            }
+          }
+          // Atualiza também no Dexie se encontrou
+          if (address.lat && address.lng) {
+             await db.settings.update(1, { address });
+          }
+
           const { lat, lng, ...addrRest } = address;
-          apiPayload = { ...apiPayload, ...addrRest };
+          apiPayload = { ...apiPayload, ...addrRest, lat: lat as number, lng: lng as number };
         }
         await api.put('/settings', apiPayload);
       } catch (apiErr) {
@@ -94,308 +123,290 @@ export default function Settings() {
         
         {/* BLOCO 1: Informações da Empresa */}
         <div className="settings-card glass-panel">
-          <h2>Informações da Loja</h2>
-          <p className="card-subtitle">Dados principais da sua loja ou empresa</p>
-          
-          <div className="form-row">
-            <div className="form-group">
-              <label>Nome Fantasia</label>
-              <input type="text" placeholder="Nome Fantasia" value={formData.tradeName} onChange={e => setFormData({...formData, tradeName: e.target.value})} required />
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', cursor: 'pointer' }} onClick={() => toggleSection('loja')}>
+            <div>
+              <h2 style={{ margin: 0 }}>Informações da Loja</h2>
+              <p className="card-subtitle" style={{ margin: 0, marginTop: '0.2rem' }}>Dados principais da sua loja ou empresa</p>
             </div>
-            <div className="form-group">
-              <label>Razão Social</label>
-              <input type="text" placeholder="Razão Social" value={formData.companyName} onChange={e => setFormData({...formData, companyName: e.target.value})} />
-            </div>
+            {expandedSections.loja ? <ChevronUp size={24} color="var(--text-muted)" /> : <ChevronDown size={24} color="var(--text-muted)" />}
           </div>
+          
+          {expandedSections.loja && (
+            <div style={{ marginTop: '1.5rem' }}>
+              <div className="form-row">
+                <div className="form-group">
+                  <label>Nome Fantasia</label>
+                  <input type="text" placeholder="Nome Fantasia" value={formData.tradeName} onChange={e => setFormData({...formData, tradeName: e.target.value})} required />
+                </div>
+                <div className="form-group">
+                  <label>Razão Social</label>
+                  <input type="text" placeholder="Razão Social" value={formData.companyName} onChange={e => setFormData({...formData, companyName: e.target.value})} />
+                </div>
+              </div>
 
-          <div className="form-row">
-            <div className="form-group">
-              <label>CNPJ</label>
-              <input type="text" placeholder="00.000.000/0000-00" value={formData.cnpj} onChange={e => setFormData({...formData, cnpj: maskCNPJ(e.target.value)})} />
-            </div>
-            <div className="form-group">
-              <label>Data de Nascimento (Administrador)</label>
-              <input type="text" placeholder="DD/MM/AAAA" value={formData.ownerBirthDate} onChange={e => setFormData({...formData, ownerBirthDate: maskDate(e.target.value)})} />
-            </div>
-          </div>
+              <div className="form-row">
+                <div className="form-group">
+                  <label>CNPJ</label>
+                  <input type="text" placeholder="00.000.000/0000-00" value={formData.cnpj} onChange={e => setFormData({...formData, cnpj: maskCNPJ(e.target.value)})} />
+                </div>
+                <div className="form-group">
+                  <label>Data de Nascimento (Administrador)</label>
+                  <input type="text" placeholder="DD/MM/AAAA" value={formData.ownerBirthDate} onChange={e => setFormData({...formData, ownerBirthDate: maskDate(e.target.value)})} />
+                </div>
+              </div>
 
-          <div className="form-row">
-            <div className="form-group">
-              <label>Telefone / WhatsApp</label>
-              <input type="text" required placeholder="(00) 00000-0000" value={formData.phone} onChange={e => setFormData({...formData, phone: maskPhone(e.target.value)})} />
-            </div>
-            <div className="form-group">
-              <label>E-mail de Contato</label>
-              <input type="email" placeholder="loja@email.com" value={formData.email} onChange={e => setFormData({...formData, email: e.target.value})} />
-            </div>
-          </div>
-          
-          <div style={{display: 'flex', justifyContent: 'space-between', alignItems: 'center', margin: '1.5rem 0 0.5rem'}}>
-            <h3 style={{fontSize: '0.95rem', margin: 0, color: 'var(--text-muted)'}}>Endereço</h3>
-            <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
-              <span style={{ fontSize: '0.85rem', color: 'var(--text-secondary)' }}>Mostrar na Loja para o Cliente</span>
-              <label className="toggle-switch">
-                <input type="checkbox" checked={formData.show_address_storefront !== false} onChange={e => setFormData({...formData, show_address_storefront: e.target.checked})} />
-                <span className="slider"></span>
-              </label>
-            </div>
-          </div>
-          
-          <div style={{ marginTop: '1rem', display: 'flex', flexDirection: 'column', gap: '1rem' }}>
-            <div className="form-row">
+              <div className="form-row">
+                <div className="form-group">
+                  <label>Telefone / WhatsApp</label>
+                  <input type="text" required placeholder="(00) 00000-0000" value={formData.phone} onChange={e => setFormData({...formData, phone: maskPhone(e.target.value)})} />
+                </div>
+                <div className="form-group">
+                  <label>E-mail de Contato</label>
+                  <input type="email" placeholder="loja@email.com" value={formData.email} onChange={e => setFormData({...formData, email: e.target.value})} />
+                </div>
+              </div>
+
               <div className="form-group">
-                <label>CEP</label>
-                <input type="text" placeholder="00000-000" value={formData.address?.cep || ''} onChange={handleCepChange} />
-              </div>
-              <div className="form-group">
-                <label>UF</label>
-                <input type="text" maxLength={2} placeholder="SP" value={formData.address?.state || ''} onChange={e => setFormData({...formData, address: {...formData.address!, state: e.target.value}})} />
+                <div style={{display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.5rem'}}>
+                  <label style={{marginBottom: 0}}>Endereço</label>
+                  <div style={{display: 'flex', alignItems: 'center', gap: '0.5rem'}}>
+                    <span style={{fontSize: '0.85rem', color: 'var(--text-muted)'}}>Mostrar na Loja para o Cliente</span>
+                    <label className="toggle-switch" style={{ transform: 'scale(0.8)', transformOrigin: 'right' }}>
+                      <input type="checkbox" checked={formData.show_address_storefront ?? true} onChange={e => setFormData({...formData, show_address_storefront: e.target.checked})} />
+                      <span className="slider"></span>
+                    </label>
+                  </div>
+                </div>
+                
+                <div className="form-row">
+                  <div className="form-group">
+                    <label>CEP</label>
+                    <input type="text" maxLength={9} placeholder="00000-000" value={formData.address?.cep || ''} onChange={handleCepChange} />
+                  </div>
+                  <div className="form-group">
+                    <label>UF</label>
+                    <input type="text" maxLength={2} placeholder="SP" value={formData.address?.state || ''} onChange={e => setFormData({...formData, address: {...formData.address!, state: e.target.value}})} />
+                  </div>
+                </div>
+                <div className="form-row">
+                  <div className="form-group" style={{flex: 2}}>
+                    <label>Rua / Avenida</label>
+                    <input type="text" value={formData.address?.street || ''} onChange={e => setFormData({...formData, address: {...formData.address!, street: e.target.value}})} />
+                  </div>
+                  <div className="form-group">
+                    <label>Número</label>
+                    <input type="text" value={formData.address?.number || ''} onChange={e => setFormData({...formData, address: {...formData.address!, number: e.target.value}})} />
+                  </div>
+                </div>
+                <div className="form-row">
+                  <div className="form-group">
+                    <label>Bairro</label>
+                    <input type="text" value={formData.address?.neighborhood || ''} onChange={e => setFormData({...formData, address: {...formData.address!, neighborhood: e.target.value}})} />
+                  </div>
+                  <div className="form-group">
+                    <label>Cidade</label>
+                    <input type="text" value={formData.address?.city || ''} onChange={e => setFormData({...formData, address: {...formData.address!, city: e.target.value}})} />
+                  </div>
+                </div>
+                <div className="form-group">
+                  <label>Complemento / Observação</label>
+                  <input type="text" value={formData.address?.observation || ''} onChange={e => setFormData({...formData, address: {...formData.address!, observation: e.target.value}})} />
+                </div>
               </div>
             </div>
-            <div className="form-row">
-              <div className="form-group" style={{flex: 2}}>
-                <label>Rua / Avenida</label>
-                <input type="text" value={formData.address?.street || ''} onChange={e => setFormData({...formData, address: {...formData.address!, street: e.target.value}})} />
-              </div>
-              <div className="form-group">
-                <label>Número</label>
-                <input type="text" value={formData.address?.number || ''} onChange={e => setFormData({...formData, address: {...formData.address!, number: e.target.value}})} />
-              </div>
-            </div>
-            <div className="form-row">
-              <div className="form-group">
-                <label>Bairro</label>
-                <input type="text" value={formData.address?.neighborhood || ''} onChange={e => setFormData({...formData, address: {...formData.address!, neighborhood: e.target.value}})} />
-              </div>
-              <div className="form-group">
-                <label>Cidade</label>
-                <input type="text" value={formData.address?.city || ''} onChange={e => setFormData({...formData, address: {...formData.address!, city: e.target.value}})} />
-              </div>
-            </div>
-            <div className="form-group">
-              <label>Complemento / Observação</label>
-              <input type="text" value={formData.address?.observation || ''} onChange={e => setFormData({...formData, address: {...formData.address!, observation: e.target.value}})} />
-            </div>
-          </div>
+          )}
         </div>
 
-        {/* BLOCO 2: Automações de Fidelidade */}
+        {/* BLOCO 2.5: Frete e Entregas */}
         <div className="settings-card glass-panel">
-          <h2>Regras e Automações</h2>
-          <p className="card-subtitle">Configure as políticas de fidelidade e cobranças</p>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', cursor: 'pointer' }} onClick={() => toggleSection('frete')}>
+            <div>
+              <h2 style={{ margin: 0 }}>Frete e Entregas</h2>
+              <p className="card-subtitle" style={{ margin: 0, marginTop: '0.2rem' }}>Configure as taxas de entrega para os pedidos feitos na loja online (Storefront).</p>
+            </div>
+            {expandedSections.frete ? <ChevronUp size={24} color="var(--text-muted)" /> : <ChevronDown size={24} color="var(--text-muted)" />}
+          </div>
           
-          <div className="rule-section">
-            <div className="rule-header">
-              <div className="rule-title">
-                <h4>Status de Cliente Fiel</h4>
-                <label className="toggle-switch">
-                  <input type="checkbox" checked={formData.loyalty_active} onChange={e => setFormData({...formData, loyalty_active: e.target.checked})} />
-                  <span className="slider"></span>
-                </label>
-              </div>
-              <p>Perda de fidelidade caso o cliente fique sem comprar por X dias.</p>
-            </div>
-            <div className={`rule-body ${!formData.loyalty_active ? 'disabled' : ''}`}>
-              <div className="form-row">
-                <div className="form-group">
-                  <label>Dias de Inatividade Permitidos</label>
-                  <div style={{display: 'flex', alignItems: 'center', gap: '0.5rem'}}>
-                    <input type="number" min="1" value={formData.loyalty_days} onChange={e => setFormData({...formData, loyalty_days: Number(e.target.value)})} disabled={!formData.loyalty_active} style={{maxWidth: '120px'}} />
-                    <span>dias</span>
+          {expandedSections.frete && (
+            <div style={{ marginTop: '1.5rem' }}>
+              <div className="rule-section">
+                <div className="rule-header">
+                  <div className="rule-title">
+                    <h4>Habilitar Entregas</h4>
+                    <label className="toggle-switch">
+                      <input type="checkbox" checked={formData.delivery_active || false} onChange={e => setFormData({...formData, delivery_active: e.target.checked})} />
+                      <span className="slider"></span>
+                    </label>
                   </div>
+                  <p>Permitir que os clientes escolham a opção de entrega ao finalizar o carrinho.</p>
                 </div>
-              </div>
-              <p style={{ fontSize: '0.85rem', color: 'var(--text-muted)' }}>* Os valores de desconto de cliente fiel devem ser configurados individualmente dentro do cadastro de cada produto.</p>
-            </div>
-          </div>
-          <div className="rule-section">
-            <div className="rule-header">
-              <div className="rule-title">
-                <h4>Desconto de Pontualidade Global</h4>
-                <label className="toggle-switch">
-                  <input type="checkbox" checked={formData.punctuality_discount_active || false} onChange={e => setFormData({...formData, punctuality_discount_active: e.target.checked})} />
-                  <span className="slider"></span>
-                </label>
-              </div>
-              <p>Aplicar desconto se o cliente pagar a parcela até a data de vencimento.</p>
-            </div>
-            <div className={`rule-body ${!formData.punctuality_discount_active ? 'disabled' : ''}`}>
-              <div className="form-row">
-                <div className="form-group">
-                  <label>Dias de Tolerância para Desconto</label>
-                  <div style={{display: 'flex', alignItems: 'center', gap: '0.5rem'}}>
-                    <input type="number" min="0" value={formData.punctuality_discount_days || 0} onChange={e => setFormData({...formData, punctuality_discount_days: Number(e.target.value)})} disabled={!formData.punctuality_discount_active} style={{maxWidth: '120px'}} />
-                    <span>dias</span>
-                  </div>
-                </div>
-              </div>
-              <p style={{ fontSize: '0.85rem', color: 'var(--text-muted)' }}>* Os valores de desconto de pontualidade devem ser configurados individualmente dentro do cadastro de cada produto.</p>
-            </div>
-          </div>
-
-          <div className="rule-section">
-            <div className="rule-header">
-              <div className="rule-title">
-                <h4>Multa e Juros por Atraso</h4>
-                <label className="toggle-switch">
-                  <input type="checkbox" checked={formData.penalty_active} onChange={e => setFormData({...formData, penalty_active: e.target.checked})} />
-                  <span className="slider"></span>
-                </label>
-              </div>
-              <p>Adicionar encargos em compras a prazo estouradas.</p>
-            </div>
-            <div className={`rule-body ${!formData.penalty_active ? 'disabled' : ''}`}>
-              <div className="form-row">
-                <div className="form-group">
-                  <label>Multa (Fixa %)</label>
-                  <div style={{display: 'flex', alignItems: 'center', gap: '0.5rem'}}>
-                    <input type="number" min="0" step="0.1" value={formData.penalty_percent} onChange={e => setFormData({...formData, penalty_percent: Number(e.target.value)})} disabled={!formData.penalty_active} />
-                    <span>%</span>
-                  </div>
-                </div>
-                <div className="form-group">
-                  <label>Juros (Ao Mês %)</label>
-                  <div style={{display: 'flex', alignItems: 'center', gap: '0.5rem'}}>
-                    <input type="number" min="0" step="0.1" value={formData.interest_percent} onChange={e => setFormData({...formData, interest_percent: Number(e.target.value)})} disabled={!formData.penalty_active} />
-                    <span>%</span>
-                  </div>
-                </div>
-              </div>
-            </div>
-          </div>
-
-          <div className="rule-section">
-            <div className="rule-header">
-              <div className="rule-title">
-                <h4>Reserva de Carrinho</h4>
-              </div>
-              <p>Defina o tempo máximo que os itens permanecem no carrinho do cliente.</p>
-            </div>
-            <div className="rule-body">
-              <div className="form-row">
-                <div className="form-group">
-                  <label>Tempo de Reserva</label>
-                  <div style={{display: 'flex', alignItems: 'center', gap: '1rem'}}>
-                    <div style={{display: 'flex', alignItems: 'center', gap: '0.5rem'}}>
+                
+                <div className={`rule-body ${!formData.delivery_active ? 'disabled' : ''}`}>
+                  <div className="form-row">
+                    <div className="form-group">
+                      <label>Taxa Fixa Base (Opcional)</label>
                       <input 
-                        type="number" 
-                        min="0" 
-                        value={Math.floor((formData.cart_reservation_time ?? 15) / 60)} 
-                        onChange={e => {
-                          const currentMins = (formData.cart_reservation_time ?? 15) % 60;
-                          const newHours = Number(e.target.value);
-                          setFormData({...formData, cart_reservation_time: (newHours * 60) + currentMins});
-                        }} 
-                        style={{maxWidth: '80px'}} 
+                        type="text" 
+                        placeholder="Ex: 5,00" 
+                        value={maskCurrency(formData.delivery_fixed_fee ?? 0)} 
+                        onChange={e => setFormData({...formData, delivery_fixed_fee: parseCurrency(e.target.value) as number})}
+                        disabled={!formData.delivery_active}
                       />
-                      <span>horas</span>
+                      <p style={{ fontSize: '0.8rem', color: 'var(--text-muted)' }}>Taxa inicial cobrada apenas por sair com o pedido.</p>
                     </div>
-                    <div style={{display: 'flex', alignItems: 'center', gap: '0.5rem'}}>
+                    
+                    <div className="form-group">
+                      <label>Valor Adicional por KM</label>
+                      <input 
+                        type="text" 
+                        placeholder="Ex: 1,50" 
+                        value={maskCurrency(formData.delivery_fee_per_km ?? 0)} 
+                        onChange={e => setFormData({...formData, delivery_fee_per_km: parseCurrency(e.target.value) as number})}
+                        disabled={!formData.delivery_active}
+                      />
+                      <p style={{ fontSize: '0.8rem', color: 'var(--text-muted)' }}>Ex: R$ 1,50 somado a cada KM percorrido.</p>
+                    </div>
+                  </div>
+                  
+                  <div className="form-row">
+                    <div className="form-group">
+                      <label>Valor Mínimo para Entrega (R$)</label>
+                      <input 
+                        type="text" 
+                        placeholder="Ex: 50,00" 
+                        value={maskCurrency(formData.delivery_min_order_value ?? 0)} 
+                        onChange={e => setFormData({...formData, delivery_min_order_value: parseCurrency(e.target.value) as number})}
+                        disabled={!formData.delivery_active}
+                      />
+                      <p style={{ fontSize: '0.8rem', color: 'var(--text-muted)' }}>Pedidos abaixo desse valor não terão a opção de entrega disponível.</p>
+                    </div>
+                    
+                    <div className="form-group">
+                      <label>Distância Máxima (Perímetro Urbano em KM)</label>
                       <input 
                         type="number" 
+                        step="0.1" 
                         min="0"
-                        max="59"
-                        value={(formData.cart_reservation_time ?? 15) % 60} 
-                        onChange={e => {
-                          const currentHours = Math.floor((formData.cart_reservation_time ?? 15) / 60);
-                          const newMins = Number(e.target.value);
-                          setFormData({...formData, cart_reservation_time: (currentHours * 60) + newMins});
-                        }} 
-                        style={{maxWidth: '80px'}} 
+                        placeholder="Ex: 15" 
+                        value={formData.delivery_max_distance_km ?? 0} 
+                        onChange={e => setFormData({...formData, delivery_max_distance_km: parseFloat(e.target.value) || 0})}
+                        disabled={!formData.delivery_active}
                       />
-                      <span>minutos</span>
+                      <p style={{ fontSize: '0.8rem', color: 'var(--text-muted)' }}>Bloqueia entregas para clientes além desse limite de quilometragem da loja.</p>
                     </div>
                   </div>
+                  
+                  <p style={{ fontSize: '0.9rem', color: 'var(--warning)', marginTop: '1rem' }}>
+                    * Lembre-se: O sistema usará o endereço cadastrado da loja (Bloco 1) para calcular a distância até o endereço informado pelo cliente no carrinho.
+                  </p>
                 </div>
               </div>
-              <p style={{ fontSize: '0.85rem', color: 'var(--text-muted)' }}>* Ao adicionar itens ao carrinho (Storefront), um relógio regressivo será exibido ao cliente. Se o tempo zerar, o carrinho será limpo.</p>
             </div>
-          </div>
-
+          )}
         </div>
+
+
 
         {/* BLOCO 3: Integração e Comunicação (Mensageria) */}
         <div className="settings-card glass-panel">
-          <h2>Integração de Mensagens</h2>
-          <p className="card-subtitle">Configure as chaves e credenciais para o disparo de notificações de dívidas e vitrines aos clientes</p>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', cursor: 'pointer' }} onClick={() => toggleSection('mensagens')}>
+            <div>
+              <h2 style={{ margin: 0 }}>Integração de Mensagens</h2>
+              <p className="card-subtitle" style={{ margin: 0, marginTop: '0.2rem' }}>Configure as chaves e credenciais para o disparo de notificações de dívidas e vitrines aos clientes</p>
+            </div>
+            {expandedSections.mensagens ? <ChevronUp size={24} color="var(--text-muted)" /> : <ChevronDown size={24} color="var(--text-muted)" />}
+          </div>
           
-          <h3 style={{fontSize: '1.05rem', margin: '1rem 0', color: 'var(--success)'}}>Conexão WhatsApp</h3>
-          <div className="form-row">
-             <div className="form-group">
-                <label>WhatsApp Secret Token (API)</label>
-                <input type="password" placeholder="Cole o token permanente" value={formData.whatsapp_token || ''} onChange={e => setFormData({...formData, whatsapp_token: e.target.value})} />
-             </div>
-             <div className="form-group">
-                <label>ID da Instância (Session/Device)</label>
-                <input type="text" placeholder="Ex: instance12345" value={formData.whatsapp_instance || ''} onChange={e => setFormData({...formData, whatsapp_instance: e.target.value})} />
-             </div>
-          </div>
+          {expandedSections.mensagens && (
+            <div style={{ marginTop: '1.5rem' }}>
+              <h3 style={{fontSize: '1.05rem', margin: '1rem 0', color: 'var(--success)'}}>Conexão WhatsApp</h3>
+              <div className="form-row">
+                 <div className="form-group">
+                    <label>WhatsApp Secret Token (API)</label>
+                    <input type="password" placeholder="Cole o token permanente" value={formData.whatsapp_token || ''} onChange={e => setFormData({...formData, whatsapp_token: e.target.value})} />
+                 </div>
+                 <div className="form-group">
+                    <label>ID da Instância (Session/Device)</label>
+                    <input type="text" placeholder="Ex: instance12345" value={formData.whatsapp_instance || ''} onChange={e => setFormData({...formData, whatsapp_instance: e.target.value})} />
+                 </div>
+              </div>
 
-          <h3 style={{fontSize: '1.05rem', margin: '1rem 0', color: 'var(--primary)'}}>Conexão E-mail (Servidor SMTP / API)</h3>
-          <div className="form-row">
-             <div className="form-group">
-                <label>Chave de Autorização (Token/Password)</label>
-                <input type="password" placeholder="Cole a chave de acesso" value={formData.email_token || ''} onChange={e => setFormData({...formData, email_token: e.target.value})} />
-             </div>
-             <div className="form-group">
-                <label>Remetente Base (Sender Address)</label>
-                <input type="email" placeholder="notifica@minhaloja.com" value={formData.email_sender || ''} onChange={e => setFormData({...formData, email_sender: e.target.value})} />
-             </div>
-          </div>
+              <h3 style={{fontSize: '1.05rem', margin: '1rem 0', color: 'var(--primary)'}}>Conexão E-mail (Servidor SMTP / API)</h3>
+              <div className="form-row">
+                 <div className="form-group">
+                    <label>Chave de Autorização (Token/Password)</label>
+                    <input type="password" placeholder="Cole a chave de acesso" value={formData.email_token || ''} onChange={e => setFormData({...formData, email_token: e.target.value})} />
+                 </div>
+                 <div className="form-group">
+                    <label>Remetente Base (Sender Address)</label>
+                    <input type="email" placeholder="notifica@minhaloja.com" value={formData.email_sender || ''} onChange={e => setFormData({...formData, email_sender: e.target.value})} />
+                 </div>
+              </div>
+            </div>
+          )}
         </div>
 
         {/* BLOCO 4: Integração de Pagamentos Online */}
         <div className="settings-card glass-panel">
-          <div className="rule-header" style={{ marginBottom: '1.5rem', borderBottom: '1px solid var(--border-color)', paddingBottom: '1rem' }}>
-            <div className="rule-title">
-              <h2>Pagamentos Online (Gateway)</h2>
-              <label className="toggle-switch">
-                <input type="checkbox" checked={formData.online_payment_active || false} onChange={e => setFormData({...formData, online_payment_active: e.target.checked})} />
-                <span className="slider"></span>
-              </label>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', cursor: 'pointer' }} onClick={() => toggleSection('pagamentos')}>
+            <div style={{ flex: 1 }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.2rem' }}>
+                <h2 style={{ margin: 0 }}>Pagamentos Online (Gateway)</h2>
+                <div onClick={e => e.stopPropagation()} style={{ marginRight: '1rem' }}>
+                  <label className="toggle-switch">
+                    <input type="checkbox" checked={formData.online_payment_active || false} onChange={e => setFormData({...formData, online_payment_active: e.target.checked})} />
+                    <span className="slider"></span>
+                  </label>
+                </div>
+              </div>
+              <p className="card-subtitle" style={{ margin: 0 }}>Configure o gateway para receber pagamentos via link, pix e boleto de forma automática.</p>
             </div>
-            <p className="card-subtitle" style={{ marginTop: '0.5rem' }}>Configure o gateway para receber pagamentos via link, pix e boleto de forma automática.</p>
+            {expandedSections.pagamentos ? <ChevronUp size={24} color="var(--text-muted)" /> : <ChevronDown size={24} color="var(--text-muted)" />}
           </div>
           
-          <div className={`rule-body ${!formData.online_payment_active ? 'disabled' : ''}`}>
-            <div className="form-group">
-              <label>Gateway de Pagamento</label>
-              <select 
-                value={formData.payment_gateway || ''} 
-                onChange={e => setFormData({...formData, payment_gateway: e.target.value})}
-                disabled={!formData.online_payment_active}
-                style={{ width: '100%', padding: '0.8rem', borderRadius: '8px', background: 'rgba(0,0,0,0.2)', border: '1px solid var(--border-color)', color: 'var(--text-main)', outline: 'none' }}
-              >
-                <option value="" style={{ background: 'var(--bg-panel)' }}>Selecione um gateway...</option>
-                <option value="mercadopago" style={{ background: 'var(--bg-panel)' }}>Mercado Pago</option>
-                <option value="asaas" style={{ background: 'var(--bg-panel)' }}>Asaas</option>
-                <option value="stripe" style={{ background: 'var(--bg-panel)' }}>Stripe</option>
-                <option value="pagseguro" style={{ background: 'var(--bg-panel)' }}>PagSeguro</option>
-              </select>
-            </div>
-            <div className="form-row" style={{ marginTop: '1rem' }}>
-              <div className="form-group">
-                <label>Token de Acesso (API Key / Access Token)</label>
-                <input 
-                  type="password" 
-                  placeholder="Cole a chave de API de produção" 
-                  value={formData.payment_api_key || ''} 
-                  onChange={e => setFormData({...formData, payment_api_key: e.target.value})}
-                  disabled={!formData.online_payment_active}
-                />
+          {expandedSections.pagamentos && (
+            <div style={{ marginTop: '1.5rem' }}>
+              <div className={`rule-body ${!formData.online_payment_active ? 'disabled' : ''}`}>
+                <div className="form-group">
+                  <label>Gateway de Pagamento</label>
+                  <select 
+                    value={formData.payment_gateway || ''} 
+                    onChange={e => setFormData({...formData, payment_gateway: e.target.value})}
+                    disabled={!formData.online_payment_active}
+                    style={{ width: '100%', padding: '0.8rem', borderRadius: '8px', background: 'rgba(0,0,0,0.2)', border: '1px solid var(--border-color)', color: 'var(--text-main)', outline: 'none' }}
+                  >
+                    <option value="" style={{ background: 'var(--bg-panel)' }}>Selecione um gateway...</option>
+                    <option value="mercadopago" style={{ background: 'var(--bg-panel)' }}>Mercado Pago</option>
+                    <option value="asaas" style={{ background: 'var(--bg-panel)' }}>Asaas</option>
+                    <option value="stripe" style={{ background: 'var(--bg-panel)' }}>Stripe</option>
+                    <option value="pagseguro" style={{ background: 'var(--bg-panel)' }}>PagSeguro</option>
+                  </select>
+                </div>
+                <div className="form-row" style={{ marginTop: '1rem' }}>
+                  <div className="form-group">
+                    <label>Token de Acesso (API Key / Access Token)</label>
+                    <input 
+                      type="password" 
+                      placeholder="Cole a chave de API de produção" 
+                      value={formData.payment_api_key || ''} 
+                      onChange={e => setFormData({...formData, payment_api_key: e.target.value})}
+                      disabled={!formData.online_payment_active}
+                    />
+                  </div>
+                  <div className="form-group">
+                    <label>Segredo do Webhook (Webhook Secret)</label>
+                    <input 
+                      type="password" 
+                      placeholder="Chave secreta para validação de retornos" 
+                      value={formData.payment_webhook_secret || ''} 
+                      onChange={e => setFormData({...formData, payment_webhook_secret: e.target.value})}
+                      disabled={!formData.online_payment_active}
+                    />
+                  </div>
+                </div>
               </div>
-              <div className="form-group">
-                <label>Segredo do Webhook (Webhook Secret)</label>
-                <input 
-                  type="password" 
-                  placeholder="Chave secreta para validação de retornos" 
-                  value={formData.payment_webhook_secret || ''} 
-                  onChange={e => setFormData({...formData, payment_webhook_secret: e.target.value})}
-                  disabled={!formData.online_payment_active}
-                />
-              </div>
             </div>
-          </div>
+          )}
         </div>
 
         <div className="settings-footer">

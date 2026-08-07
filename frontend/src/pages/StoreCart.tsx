@@ -4,6 +4,8 @@ import { ShoppingCart, Trash2, Plus, Minus, ArrowLeft, CheckSquare, Square, Chec
 import { useCart } from '../contexts/CartContext';
 import { useAuth } from '../contexts/AuthContext';
 import { api } from '../services/api';
+import { db } from '../db/db';
+import { getDistanceFromLatLonInKm } from '../utils/distance';
 
 type PaymentMethodType = 'pix' | 'credit_card' | 'debit_card' | 'money' | 'store_credit';
 
@@ -27,9 +29,25 @@ export default function StoreCart() {
 
   const hasActiveCredit = user && user.credit_limit > 0 && !user.is_blocked;
   const isCreditMode = payments.store_credit.selected;
-  const currentTotal = isCreditMode ? cartTotalCredit : cartTotalCash;
+  
+  const [deliveryType, setDeliveryType] = useState<'pickup' | 'delivery'>('pickup');
+  const [customerCep, setCustomerCep] = useState('');
+  const [customerAddressStr, setCustomerAddressStr] = useState('');
+  const [deliveryFee, setDeliveryFee] = useState(0);
+  const [deliverySettings, setDeliverySettings] = useState<any>(null);
+  const [deliveryError, setDeliveryError] = useState('');
+
+  const currentTotal = isCreditMode ? cartTotalCredit + deliveryFee : cartTotalCash + deliveryFee;
 
   const [timeLeft, setTimeLeft] = useState<string | null>(null);
+
+  useEffect(() => {
+    async function loadSettings() {
+      const s = await db.settings.get(1);
+      if (s) setDeliverySettings(s);
+    }
+    loadSettings();
+  }, []);
 
   useEffect(() => {
     if (!cartExpiresAt || cart.length === 0) {
@@ -198,7 +216,20 @@ export default function StoreCart() {
 
   const handleCheckout = async () => {
     const selectedKeys = Object.keys(payments).filter(k => payments[k as PaymentMethodType].selected) as PaymentMethodType[];
-    
+    const sumAmounts = selectedKeys.reduce((sum, k) => sum + payments[k].amount, 0);
+
+    if (Math.abs(currentTotal - sumAmounts) > 0.05) {
+      alert('O valor dos pagamentos deve ser igual ao total do pedido.');
+      return;
+    }
+
+    if (deliveryType === 'delivery') {
+      if (!customerCep || deliveryError) {
+         alert('Por favor, calcule um frete válido para o seu endereço antes de finalizar.');
+         return;
+      }
+    }
+
     if (selectedKeys.length === 0) {
       alert('Selecione pelo menos uma forma de pagamento.');
       return;
@@ -252,6 +283,8 @@ export default function StoreCart() {
       const payload: any = {
         customerId: user?.id,
         totalAmount: currentTotal,
+        delivery_fee: deliveryType === 'delivery' ? deliveryFee : 0,
+        delivery_address: deliveryType === 'delivery' ? `${customerCep} - ${customerAddressStr}` : null,
         paymentMethod: paymentStrings.join(' | ') + (payments.store_credit.selected ? ' | credit' : ''),
         status: 'pending',
         date: new Date().toISOString(),
@@ -372,6 +405,56 @@ export default function StoreCart() {
   const selectedMethods = Object.keys(payments).filter(k => payments[k as PaymentMethodType].selected) as PaymentMethodType[];
   const sumAmounts = selectedMethods.reduce((sum, k) => sum + payments[k].amount, 0);
   const remaining = currentTotal - sumAmounts;
+
+  const calculateDelivery = async () => {
+    if (!deliverySettings || !deliverySettings.address?.lat) {
+      setDeliveryError('Endereço da loja não configurado corretamente para cálculo.');
+      return;
+    }
+    const cepDigits = customerCep.replace(/\D/g, '');
+    if (cepDigits.length !== 8) {
+      setDeliveryError('CEP inválido.');
+      return;
+    }
+    
+    const subtotal = isCreditMode ? cartTotalCredit : cartTotalCash;
+    if (deliverySettings.delivery_min_order_value && subtotal < deliverySettings.delivery_min_order_value) {
+       setDeliveryError(`O valor mínimo para entrega é de R$ ${deliverySettings.delivery_min_order_value.toLocaleString('pt-BR', {minimumFractionDigits: 2})}. Seu pedido atual tem R$ ${subtotal.toLocaleString('pt-BR', {minimumFractionDigits: 2})}.`);
+       setDeliveryFee(0);
+       return;
+    }
+    try {
+       setDeliveryError('');
+       // 1. Fetch from nominatim
+       const res = await fetch(`https://nominatim.openstreetmap.org/search?postalcode=${cepDigits}&country=Brazil&format=json`);
+       const data = await res.json();
+       if (!data || data.length === 0) {
+          setDeliveryError('CEP não encontrado no mapa.');
+          setDeliveryFee(0);
+          return;
+       }
+       const custLat = parseFloat(data[0].lat);
+       const custLng = parseFloat(data[0].lon);
+       
+       const distKm = getDistanceFromLatLonInKm(deliverySettings.address.lat, deliverySettings.address.lng, custLat, custLng);
+       
+       if (deliverySettings.delivery_max_distance_km && distKm > deliverySettings.delivery_max_distance_km) {
+          setDeliveryError(`Fora da área de entrega. A loja entrega até ${deliverySettings.delivery_max_distance_km}km e você está a ${distKm.toFixed(1)}km.`);
+          setDeliveryFee(0);
+          return;
+       }
+       
+       let fee = deliverySettings.delivery_fixed_fee || 0;
+       fee += (deliverySettings.delivery_fee_per_km || 0) * distKm;
+       
+       setDeliveryFee(fee);
+       setDeliveryError('');
+       setCustomerAddressStr(data[0].display_name);
+    } catch(err) {
+       setDeliveryError('Erro ao calcular rota.');
+       setDeliveryFee(0);
+    }
+  };
 
   return (
     <div className="store-container" style={{ paddingBottom: '4rem' }}>
@@ -610,14 +693,70 @@ export default function StoreCart() {
           </div>
         </div>
 
+        {/* FRETE E ENTREGA */}
+        {deliverySettings?.delivery_active && (
+           <div className="glass-panel" style={{ padding: '1.5rem', borderRadius: '12px' }}>
+              <h3 style={{ margin: '0 0 1rem 0', color: 'var(--text-main)' }}>Opções de Entrega</h3>
+              <div style={{ display: 'flex', gap: '1rem', marginBottom: '1.5rem' }}>
+                 <label style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', cursor: 'pointer', color: 'var(--text-main)' }}>
+                    <input type="radio" checked={deliveryType === 'pickup'} onChange={() => { setDeliveryType('pickup'); setDeliveryFee(0); }} style={{ accentColor: 'var(--primary)' }} />
+                    Retirar na Loja (Grátis)
+                 </label>
+                 <label style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', cursor: 'pointer', color: 'var(--text-main)' }}>
+                    <input type="radio" checked={deliveryType === 'delivery'} onChange={() => setDeliveryType('delivery')} style={{ accentColor: 'var(--primary)' }} />
+                    Entrega em Domicílio
+                 </label>
+              </div>
+
+              {deliveryType === 'delivery' && (
+                 <div style={{ background: 'var(--bg-main)', padding: '1rem', borderRadius: '8px', border: '1px solid var(--border-color)' }}>
+                    <div style={{ display: 'flex', gap: '0.5rem', alignItems: 'flex-end', flexWrap: 'wrap' }}>
+                       <div style={{ display: 'flex', flexDirection: 'column', gap: '0.3rem', flex: 1, minWidth: '200px' }}>
+                          <label style={{ fontSize: '0.85rem', color: 'var(--text-secondary)' }}>Digite seu CEP</label>
+                          <input 
+                             type="text" 
+                             placeholder="Ex: 01001-000"
+                             value={customerCep}
+                             onChange={(e) => setCustomerCep(e.target.value)}
+                             style={{ padding: '0.6rem', borderRadius: '4px', border: '1px solid var(--border-color)', background: 'var(--bg-panel)', color: 'var(--text-main)' }}
+                          />
+                       </div>
+                       <button onClick={calculateDelivery} className="btn-primary" style={{ padding: '0.6rem 1rem', borderRadius: '4px', whiteSpace: 'nowrap' }}>
+                          Calcular Frete
+                       </button>
+                    </div>
+                    
+                    {deliveryError && (
+                       <div style={{ marginTop: '1rem', color: 'var(--danger)', fontSize: '0.9rem' }}>
+                          {deliveryError}
+                       </div>
+                    )}
+                    
+                    {!deliveryError && deliveryFee > 0 && (
+                       <div style={{ marginTop: '1rem', color: 'var(--success)', fontSize: '0.95rem' }}>
+                          Frete calculado: <strong>R$ {deliveryFee.toLocaleString('pt-BR', {minimumFractionDigits: 2})}</strong>
+                          <div style={{ fontSize: '0.8rem', color: 'var(--text-muted)', marginTop: '0.2rem' }}>{customerAddressStr}</div>
+                       </div>
+                    )}
+                 </div>
+              )}
+           </div>
+        )}
+
         <div className="glass-panel" style={{ padding: '1.5rem', borderRadius: '12px' }}>
           <h3 style={{ margin: '0 0 1.5rem 0', color: 'var(--text-main)' }}>Resumo do Pedido</h3>
           
           <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem', marginBottom: '2rem' }}>
             <div style={{ display: 'flex', justifyContent: 'space-between', color: 'var(--text-secondary)' }}>
               <span>Subtotal ({cart.length} itens)</span>
-              <span>R$ {currentTotal.toLocaleString('pt-BR', {minimumFractionDigits: 2, maximumFractionDigits: 2})}</span>
+              <span>R$ {(currentTotal - deliveryFee).toLocaleString('pt-BR', {minimumFractionDigits: 2, maximumFractionDigits: 2})}</span>
             </div>
+            {deliveryFee > 0 && (
+              <div style={{ display: 'flex', justifyContent: 'space-between', color: 'var(--text-secondary)' }}>
+                <span>Frete</span>
+                <span>R$ {deliveryFee.toLocaleString('pt-BR', {minimumFractionDigits: 2, maximumFractionDigits: 2})}</span>
+              </div>
+            )}
             <div style={{ display: 'flex', justifyContent: 'space-between', color: 'var(--text-secondary)' }}>
               <span>Tabela de Preços</span>
               <span style={{ color: isCreditMode ? 'var(--warning)' : 'var(--success)' }}>

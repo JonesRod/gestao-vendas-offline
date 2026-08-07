@@ -110,6 +110,8 @@ model Sale {
   date           DateTime
   due_date       DateTime?
   invoice_number String?
+  delivery_fee     Float?
+  delivery_address String?
 
   customer     Customer?     @relation(fields: [customerId], references: [id])
   items        SaleItem[]
@@ -225,6 +227,14 @@ model Settings {
 
   cart_reservation_time  Int? @default(15) // Tempo de reserva do carrinho em minutos
 
+  delivery_active          Boolean @default(false)
+  delivery_fee_per_km      Float   @default(0)
+  delivery_max_distance_km Float   @default(0)
+  delivery_fixed_fee       Float   @default(0)
+  delivery_min_order_value Float   @default(0)
+  lat                      Float?
+  lng                      Float?
+
   updated_at DateTime?
 }
 
@@ -286,6 +296,8 @@ model OnlineOrder {
   paymentMethod String
   date          DateTime @default(now())
   items         String // JSON string of items
+  delivery_fee     Float?
+  delivery_address String?
 
   customer Customer @relation(fields: [customerId], references: [id])
 }

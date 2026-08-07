@@ -15,6 +15,16 @@ export default function StoreOrders() {
   const [loading, setLoading] = useState(true);
   const [filter, setFilter] = useState<string>(highlightParam === 'pending' ? 'pending' : 'all');
   const [expandedId, setExpandedId] = useState<number | null>(null);
+  
+  // States for Cancel Modal and Toast
+  const [showCancelModal, setShowCancelModal] = useState(false);
+  const [orderToCancel, setOrderToCancel] = useState<number | null>(null);
+  const [toastMessage, setToastMessage] = useState<string | null>(null);
+
+  const showToast = (msg: string) => {
+    setToastMessage(msg);
+    setTimeout(() => setToastMessage(null), 3000);
+  };
 
   useEffect(() => {
     const fetchOrders = async () => {
@@ -34,6 +44,20 @@ export default function StoreOrders() {
     };
     fetchOrders();
   }, [user]);
+
+  const handleCancelOrder = async (orderId: number) => {
+    if (!orderId) return;
+    try {
+      await api.put(`/sales/${orderId}/status`, { status: 'cancelled' });
+      setOrders(orders.map(o => o.id === orderId ? { ...o, status: 'cancelled' } : o));
+      setShowCancelModal(false);
+      setOrderToCancel(null);
+      showToast('Pedido cancelado com sucesso!');
+    } catch (err) {
+      console.error('Failed to cancel order', err);
+      alert('Erro ao cancelar o pedido.');
+    }
+  };
 
   const getStatusBadge = (status: string) => {
     switch (status) {
@@ -246,12 +270,67 @@ export default function StoreOrders() {
                 >
                   Compartilhar
                 </button>
+                {order.status === 'pending' && (
+                  <button 
+                    className="btn-secondary" 
+                    style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '0.5rem', padding: '0.75rem', borderRadius: '8px', background: 'rgba(231, 76, 60, 0.1)', border: '1px solid var(--danger)', color: 'var(--danger)', cursor: 'pointer' }}
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      setOrderToCancel(order.id);
+                      setShowCancelModal(true);
+                    }}
+                  >
+                    <XCircle size={18} /> Cancelar Pedido
+                  </button>
+                )}
               </div>
               </>
               )}
             </div>
             );
           })}
+        </div>
+      )}
+
+      {/* MODAL DE CONFIRMAÇÃO DE CANCELAMENTO */}
+      {showCancelModal && (
+        <div style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, background: 'rgba(0,0,0,0.7)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 9999, padding: '1rem' }}>
+          <div className="glass-panel" style={{ background: 'var(--bg-panel)', padding: '2rem', borderRadius: '16px', maxWidth: '400px', width: '100%', textAlign: 'center', border: '1px solid var(--border-color)' }}>
+            <XCircle size={48} style={{ color: 'var(--danger)', marginBottom: '1rem' }} />
+            <h3 style={{ margin: '0 0 1rem 0', color: 'var(--text-main)' }}>Cancelar Pedido?</h3>
+            <p style={{ color: 'var(--text-secondary)', marginBottom: '2rem' }}>Tem certeza que deseja cancelar este pedido? Esta ação não poderá ser desfeita.</p>
+            <div style={{ display: 'flex', gap: '1rem' }}>
+              <button 
+                className="btn-secondary" 
+                style={{ flex: 1, padding: '0.8rem', borderRadius: '8px', border: '1px solid var(--border-color)', background: 'transparent', color: 'var(--text-main)', cursor: 'pointer' }}
+                onClick={() => {
+                  setShowCancelModal(false);
+                  setOrderToCancel(null);
+                }}
+              >
+                Voltar
+              </button>
+              <button 
+                className="btn-primary" 
+                style={{ flex: 1, padding: '0.8rem', borderRadius: '8px', background: 'var(--danger)', color: 'white', border: 'none', cursor: 'pointer' }}
+                onClick={() => {
+                  if (orderToCancel) {
+                    handleCancelOrder(orderToCancel);
+                  }
+                }}
+              >
+                Sim, Cancelar
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* TOAST DE NOTIFICAÇÃO */}
+      {toastMessage && (
+        <div style={{ position: 'fixed', bottom: '2rem', right: '2rem', background: '#10b981', color: 'white', padding: '1rem 2rem', borderRadius: '8px', boxShadow: '0 4px 12px rgba(0,0,0,0.15)', zIndex: 9999, display: 'flex', alignItems: 'center', gap: '0.5rem', fontWeight: 'bold' }}>
+          <CheckCircle size={20} />
+          {toastMessage}
         </div>
       )}
     </div>

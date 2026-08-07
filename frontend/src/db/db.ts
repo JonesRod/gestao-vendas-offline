@@ -160,6 +160,11 @@ export interface Settings {
   payment_api_key?: string;
   payment_webhook_secret?: string;
   cart_reservation_time?: number;
+  delivery_active?: boolean;
+  delivery_fee_per_km?: number;
+  delivery_max_distance_km?: number;
+  delivery_fixed_fee?: number;
+  delivery_min_order_value?: number;
   updated_at?: Date;
 }
 
