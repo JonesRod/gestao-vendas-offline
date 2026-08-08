@@ -19,18 +19,34 @@ export async function sendWhatsAppMessage(phone: string, text: string) {
 
     // A URL base não deve ter barra no final, mas por via das dúvidas:
     const baseUrl = settings.whatsapp_url.replace(/\/$/, '');
-    const url = `${baseUrl}/message/sendText/${settings.whatsapp_instance}`;
     
-    await axios.post(url, {
-      number: cleanPhone,
-      text: text
-    }, {
-      headers: {
-        'apikey': settings.whatsapp_token,
-        'Content-Type': 'application/json'
-      },
-      timeout: 5000 // 5 segundos de timeout para não travar o backend
-    });
+    if (settings.whatsapp_provider === 'zapi') {
+      // Integração Z-API
+      const url = `${baseUrl}/send-text`;
+      const headers: any = { 'Content-Type': 'application/json' };
+      if (settings.whatsapp_token) headers['Client-Token'] = settings.whatsapp_token;
+      
+      await axios.post(url, {
+        phone: cleanPhone,
+        message: text
+      }, {
+        headers,
+        timeout: 5000
+      });
+    } else {
+      // Integração Evolution API (Default)
+      const url = `${baseUrl}/message/sendText/${settings.whatsapp_instance}`;
+      await axios.post(url, {
+        number: cleanPhone,
+        text: text
+      }, {
+        headers: {
+          'apikey': settings.whatsapp_token,
+          'Content-Type': 'application/json'
+        },
+        timeout: 5000
+      });
+    }
     
     console.log(`[WhatsApp] Mensagem enviada com sucesso para ${cleanPhone}`);
     return true;

@@ -37,7 +37,7 @@ export default function Settings() {
     show_address_storefront: true,
     loyalty_active: false, loyalty_days: 30,
     penalty_active: false, penalty_percent: 2, interest_percent: 1,
-    whatsapp_url: '', whatsapp_token: '', whatsapp_instance: '', email_token: '', email_sender: '',
+    whatsapp_provider: 'evolution', whatsapp_url: '', whatsapp_token: '', whatsapp_instance: '', email_token: '', email_sender: '',
     online_payment_active: false, payment_gateway: '', payment_api_key: '', payment_webhook_secret: ''
   };
 
@@ -395,17 +395,30 @@ export default function Settings() {
               <h3 style={{fontSize: '1.05rem', margin: '1rem 0', color: 'var(--success)'}}>Conexão WhatsApp</h3>
               <div className="form-row">
                  <div className="form-group" style={{ flex: '1 1 100%' }}>
-                    <label>URL da Evolution API</label>
-                    <input type="text" placeholder="Ex: http://192.168.1.10:8080" value={formData.whatsapp_url || ''} onChange={e => setFormData({...formData, whatsapp_url: e.target.value})} />
+                    <label>Provedor da API</label>
+                    <select 
+                      value={formData.whatsapp_provider || 'evolution'} 
+                      onChange={e => setFormData({...formData, whatsapp_provider: e.target.value})}
+                      style={{ padding: '0.8rem', borderRadius: '8px', border: '1px solid var(--border)', background: 'var(--bg-secondary)', color: 'var(--text-main)', width: '100%' }}
+                    >
+                      <option value="evolution" style={{ color: '#000' }}>Evolution API</option>
+                      <option value="zapi" style={{ color: '#000' }}>Z-API</option>
+                    </select>
+                 </div>
+              </div>
+              <div className="form-row">
+                 <div className="form-group" style={{ flex: '1 1 100%' }}>
+                    <label>URL da API ({formData.whatsapp_provider === 'zapi' ? 'Ex: https://api.z-api.io/instances/SUA_INSTANCIA/token/SEU_TOKEN' : 'Ex: http://192.168.1.10:8080'})</label>
+                    <input type="text" placeholder="Cole a URL da API aqui" value={formData.whatsapp_url || ''} onChange={e => setFormData({...formData, whatsapp_url: e.target.value})} />
                  </div>
               </div>
               <div className="form-row">
                  <div className="form-group">
-                    <label>WhatsApp Secret Token (API)</label>
+                    <label>{formData.whatsapp_provider === 'zapi' ? 'Client-Token (Opcional p/ Z-API)' : 'WhatsApp Secret Token (API)'}</label>
                     <input type="password" placeholder="Cole o token permanente" value={formData.whatsapp_token || ''} onChange={e => setFormData({...formData, whatsapp_token: e.target.value})} />
                  </div>
                  <div className="form-group">
-                    <label>ID da Instância (Session/Device)</label>
+                    <label>{formData.whatsapp_provider === 'zapi' ? 'ID da Instância (Opcional p/ Z-API)' : 'ID da Instância (Session/Device)'}</label>
                     <input type="text" placeholder="Ex: instance12345" value={formData.whatsapp_instance || ''} onChange={e => setFormData({...formData, whatsapp_instance: e.target.value})} />
                  </div>
               </div>
