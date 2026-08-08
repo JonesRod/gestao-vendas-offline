@@ -149,6 +149,7 @@ export interface Settings {
   penalty_active: boolean;
   penalty_percent: number;
   interest_percent: number;
+  whatsapp_url?: string;
   whatsapp_token?: string;
   whatsapp_instance?: string;
   email_token?: string;

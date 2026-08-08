@@ -3,6 +3,7 @@ import cors from 'cors';
 import { PrismaClient } from '@prisma/client';
 import bcrypt from 'bcrypt';
 import jwt from 'jsonwebtoken';
+import { sendWhatsAppMessage } from './services/whatsapp';
 
 const prisma = new PrismaClient();
 const app = express();
@@ -254,10 +255,11 @@ app.put('/api/sales/:id/status', async (req, res) => {
       // Busca configurações para disparos
       const settings = await prisma.settings.findFirst();
       
-      // 2. Disparo de WhatsApp (mock / shell)
-      if (settings?.whatsapp_token && settings?.whatsapp_instance) {
-         console.log(`[WHATSAPP] Simulando disparo para a loja sobre o cancelamento do pedido #${sale.id}. Instância: ${settings.whatsapp_instance}`);
-         // fetch(`https://api.whatsapp.../${settings.whatsapp_instance}/messages`, { ... })
+      // 2. Disparo de WhatsApp
+      if (settings?.whatsapp_token && settings?.whatsapp_instance && sale.customer?.phone) {
+         const text = `Aviso: O seu pedido #${sale.id} no valor de R$ ${sale.totalAmount.toFixed(2)} acaba de ser cancelado. Em caso de dúvidas, entre em contato conosco.`;
+         await sendWhatsAppMessage(sale.customer.phone, text);
+         console.log(`[WHATSAPP] Aviso de cancelamento disparado para o cliente ${sale.customer.name}.`);
       }
 
       // 3. Disparo de E-mail (mock / shell)
@@ -350,8 +352,16 @@ app.post('/api/sales', async (req, res) => {
       });
 
       const settings = await prisma.settings.findFirst();
-      if (settings?.whatsapp_token && settings?.whatsapp_instance) {
-         console.log(`[WHATSAPP] Novo pedido #${result.id} do cliente ${customerName}`);
+      let customerPhone = null;
+      if (saleData.customerId) {
+        const c = await prisma.customer.findUnique({ where: { id: saleData.customerId }});
+        if (c) customerPhone = c.phone;
+      }
+
+      if (settings?.whatsapp_token && settings?.whatsapp_instance && customerPhone) {
+         const text = `Olá ${customerName}! Seu pedido #${result.id} no valor de R$ ${result.totalAmount.toFixed(2)} foi recebido com sucesso. Obrigado por comprar conosco!`;
+         await sendWhatsAppMessage(customerPhone, text);
+         console.log(`[WHATSAPP] Novo pedido #${result.id} disparado.`);
       }
       if (settings?.email_token && settings?.email_sender) {
          console.log(`[EMAIL] Novo pedido #${result.id} do cliente ${customerName}`);
@@ -797,9 +807,23 @@ app.get('/api/auth/contacts', async (req, res) => {
 // Recuperação de senha simulada
 app.post('/api/auth/forgot-password', async (req, res) => {
   const { cpf, method } = req.body;
-  // Apenas simulação por enquanto
-  console.log(`[SIMULAÇÃO] Recuperação de senha solicitada para ${cpf} via ${method}`);
-  console.log(`Link para resetar (apenas exemplo): http://localhost:5173/reset-password?token=12345&cpf=${cpf}`);
+  
+  if (method === 'whatsapp') {
+     const cleanCpf = cpf.replace(/\D/g, '');
+     const formattedCpf = cleanCpf.replace(/(\d{3})(\d{3})(\d{3})(\d{2})/, "$1.$2.$3-$4");
+     let user: any = await prisma.employee.findFirst({ where: { OR: [{ cpf: { contains: cleanCpf } }, { cpf: { contains: formattedCpf } }] } });
+     if (!user) {
+       user = await prisma.customer.findFirst({ where: { OR: [{ cpf: { contains: cleanCpf } }, { cpf: { contains: formattedCpf } }] } });
+     }
+     
+     if (user && user.phone) {
+        // Link fake de simulação
+        const resetLink = `http://localhost:5173/reset-password?token=12345&cpf=${cleanCpf}`;
+        const msg = `Olá! Recebemos um pedido para recuperar a sua senha. \n\nAcesse o link abaixo para criar uma nova senha:\n${resetLink}\n\nSe você não solicitou isso, pode ignorar esta mensagem.`;
+        await sendWhatsAppMessage(user.phone, msg);
+     }
+  }
+
   res.json({ success: true, message: `Instruções enviadas via ${method}` });
 });
 

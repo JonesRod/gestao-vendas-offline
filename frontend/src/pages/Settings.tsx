@@ -37,7 +37,7 @@ export default function Settings() {
     show_address_storefront: true,
     loyalty_active: false, loyalty_days: 30,
     penalty_active: false, penalty_percent: 2, interest_percent: 1,
-    whatsapp_token: '', whatsapp_instance: '', email_token: '', email_sender: '',
+    whatsapp_url: '', whatsapp_token: '', whatsapp_instance: '', email_token: '', email_sender: '',
     online_payment_active: false, payment_gateway: '', payment_api_key: '', payment_webhook_secret: ''
   };
 
@@ -393,6 +393,12 @@ export default function Settings() {
           {expandedSections.mensagens && (
             <div style={{ marginTop: '1.5rem' }}>
               <h3 style={{fontSize: '1.05rem', margin: '1rem 0', color: 'var(--success)'}}>Conexão WhatsApp</h3>
+              <div className="form-row">
+                 <div className="form-group" style={{ flex: '1 1 100%' }}>
+                    <label>URL da Evolution API</label>
+                    <input type="text" placeholder="Ex: http://192.168.1.10:8080" value={formData.whatsapp_url || ''} onChange={e => setFormData({...formData, whatsapp_url: e.target.value})} />
+                 </div>
+              </div>
               <div className="form-row">
                  <div className="form-group">
                     <label>WhatsApp Secret Token (API)</label>

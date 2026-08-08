@@ -215,6 +215,7 @@ model Settings {
   penalty_percent  Float
   interest_percent Float
 
+  whatsapp_url      String?
   whatsapp_token    String?
   whatsapp_instance String?
   email_token       String?
