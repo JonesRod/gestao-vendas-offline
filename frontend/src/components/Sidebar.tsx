@@ -284,6 +284,12 @@ export default function Sidebar() {
                       try {
                         await api.put(`/notifications/${n.dbId}/read`);
                         setNotifications(prev => prev.filter(x => x.id !== n.id));
+                        setIsNotifModalOpen(false);
+                        
+                        // Redireciona de acordo com o título/texto
+                        if (n.title && n.title.toLowerCase().includes('pedido')) {
+                          navigate('/orders');
+                        }
                       } catch (e) {
                         console.error(e);
                       }

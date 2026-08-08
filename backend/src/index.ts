@@ -759,6 +759,41 @@ app.post('/api/auth/register', async (req, res) => {
   }
 });
 
+app.get('/api/auth/contacts', async (req, res) => {
+  const cpf = req.query.cpf as string;
+  if (!cpf) return res.status(400).json({ error: 'CPF não informado' });
+  
+  const cleanCpf = cpf.replace(/\D/g, '');
+  const formattedCpf = cleanCpf.replace(/(\d{3})(\d{3})(\d{3})(\d{2})/, "$1.$2.$3-$4");
+  
+  let user: any = await prisma.employee.findFirst({ where: { OR: [{ cpf: { contains: cleanCpf } }, { cpf: { contains: formattedCpf } }] } });
+  if (!user) {
+    user = await prisma.customer.findFirst({ where: { OR: [{ cpf: { contains: cleanCpf } }, { cpf: { contains: formattedCpf } }] } });
+  }
+  
+  if (!user) {
+    return res.json({ contacts: [], error: 'Usuário não encontrado' });
+  }
+
+  const contacts = [];
+  
+  if (user.email) {
+    const parts = user.email.split('@');
+    if (parts.length === 2) {
+       const maskedEmail = parts[0].substring(0, 2) + '***@' + parts[1];
+       contacts.push({ type: 'email', value: user.email, masked: maskedEmail });
+    }
+  }
+  
+  if (user.phone) {
+    const p = user.phone.replace(/\D/g, '');
+    const maskedPhone = p.length >= 10 ? `(**) *****-${p.slice(-4)}` : '***' + p.slice(-4);
+    contacts.push({ type: 'whatsapp', value: user.phone, masked: maskedPhone });
+  }
+  
+  res.json({ contacts });
+});
+
 // Recuperação de senha simulada
 app.post('/api/auth/forgot-password', async (req, res) => {
   const { cpf, method } = req.body;
@@ -771,15 +806,16 @@ app.post('/api/auth/forgot-password', async (req, res) => {
 app.post('/api/auth/reset-password', async (req, res) => {
   const { cpf, token, newPassword } = req.body;
   const cleanCpf = cpf.replace(/\D/g, '');
+  const formattedCpf = cleanCpf.replace(/(\d{3})(\d{3})(\d{3})(\d{2})/, "$1.$2.$3-$4");
   
   const hashedPassword = await bcrypt.hash(newPassword, 10);
   
-  const employee = await prisma.employee.findFirst({ where: { cpf: { contains: cleanCpf } } });
+  const employee = await prisma.employee.findFirst({ where: { OR: [{ cpf: { contains: cleanCpf } }, { cpf: { contains: formattedCpf } }] } });
   if (employee) {
     await prisma.employee.update({ where: { id: employee.id }, data: { password: hashedPassword } });
   }
   
-  const customer = await prisma.customer.findFirst({ where: { cpf: { contains: cleanCpf } } });
+  const customer = await prisma.customer.findFirst({ where: { OR: [{ cpf: { contains: cleanCpf } }, { cpf: { contains: formattedCpf } }] } });
   if (customer) {
     await prisma.customer.update({ where: { id: customer.id }, data: { password: hashedPassword } });
   }
